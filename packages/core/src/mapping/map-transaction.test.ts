@@ -80,6 +80,16 @@ describe("mapTransaction", () => {
     expect(mapTransaction(txn({ chargedAmount: 0 }), cash)).toBeNull();
   });
 
+  test("skips a NaN charged amount", () => {
+    expect(mapTransaction(txn({ chargedAmount: Number.NaN }), cash)).toBeNull();
+  });
+
+  test("skips an Infinity charged amount", () => {
+    expect(
+      mapTransaction(txn({ chargedAmount: Number.POSITIVE_INFINITY }), cash)
+    ).toBeNull();
+  });
+
   test("falls back to the account currency when the charge has none", () => {
     const activity = mapTransaction(txn({ chargedCurrency: undefined }), {
       ...cash,

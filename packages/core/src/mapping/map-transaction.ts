@@ -26,6 +26,13 @@ export function mapTransaction(
   if (txn.status === "pending") {
     return null;
   }
+  // Scraper output reaches core via a compile-time cast, not runtime
+  // validation, so a parse miss upstream can hand us NaN/Infinity here despite
+  // the declared `number` type. Reject it rather than posting a corrupt
+  // amount (NaN serializes to `null`) to Wealthfolio.
+  if (!Number.isFinite(txn.chargedAmount)) {
+    return null;
+  }
   if (txn.chargedAmount === 0) {
     return null;
   }
