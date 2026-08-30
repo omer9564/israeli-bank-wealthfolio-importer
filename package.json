@@ -1,0 +1,22 @@
+{
+  "name": "israeli-bank-wealthfolio-importer",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.10",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "check": "ultracite check",
+    "fix": "ultracite fix",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.6",
+    "@types/bun": "^1.3.10",
+    "typescript": "^5.9.3",
+    "ultracite": "7.2.5"
+  }
+}

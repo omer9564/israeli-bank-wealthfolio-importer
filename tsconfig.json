@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    "types": ["bun"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "paths": { "@ibw/core": ["./packages/core/src/index.ts"] },
+    "baseUrl": "."
+  },
+  "include": ["packages/**/*.ts", "apps/**/*.ts"]
+}
