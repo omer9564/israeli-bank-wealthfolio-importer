@@ -1,0 +1,13 @@
+{
+  "name": "@ibw/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ibw": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ibw/core": "workspace:*",
+    "@ibw/scraper": "workspace:*"
+  }
+}
