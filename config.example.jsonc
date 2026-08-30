@@ -1,0 +1,167 @@
+// Israeli Bank → Wealthfolio Importer — example configuration.
+//
+// This file is JSONC (JSON with comments) purely so every field can be
+// documented in place. The importer's own config loader parses plain JSON
+// (see packages/core/src/config/resolve.ts), so before you use this file for
+// real:
+//   1. Copy it, fill in your real values, and delete every comment.
+//   2. Either point IBW_CONFIG_PATH at the resulting file, or minify it to
+//      one line and put it in the IBW_CONFIG secret/env var.
+//
+// Every field here is validated against the zod schema in
+// packages/core/src/config/schema.ts — that file is the source of truth if
+// this one ever drifts from it.
+{
+  // Your Wealthfolio instance. Only used when this file (or IBW_CONFIG) is
+  // the whole config, e.g. running the Docker container yourself. The
+  // GitHub Actions quickstart instead passes WEALTHFOLIO_URL and
+  // WEALTHFOLIO_PASSWORD as separate secrets, which override this block —
+  // see README.md → "Configuration reference".
+  "wealthfolio": {
+    // Base URL of your Wealthfolio server. Must be reachable from wherever
+    // this config actually runs (the Docker host or the Action's runner),
+    // not necessarily from your own laptop's browser.
+    "url": "http://wealthfolio.example.com:8080",
+
+    // The password you use to sign in to the Wealthfolio UI. The importer
+    // uses it once per run to obtain a short-lived session token; it is
+    // never stored anywhere by this project.
+    "password": "<wealthfolio-login-password>"
+  },
+
+  // How many days of transaction history to rescan on every run. There is
+  // no watermark or cursor: every run re-scrapes this whole trailing
+  // window and lets Wealthfolio's own server-side deduplication discard
+  // whatever it has already seen. This is what lets a late-posting card
+  // charge (routine for Israeli issuers) still get picked up on a later
+  // run instead of being silently missed by a stricter incremental sync.
+  // Optional — defaults to 30.
+  "daysBack": 30,
+
+  // Whether to detect card-payment pairs and link them as internal
+  // transfers (see "cardPayments" below, and README.md → "Card payments
+  // and double counting"). Turn this off only if you are importing bank
+  // accounts with no matching card accounts in this same config.
+  // Optional — defaults to true.
+  "linkTransfers": true,
+
+  // How many days apart a bank-side debit and a card-side credit may fall
+  // and still be considered the same monthly card payment. Widen this if
+  // your bank posts the charge several days after the card's own billing
+  // date; narrow it if you have many same-amount coincidences that pair
+  // wrongly. Optional — defaults to 5.
+  "transferWindowDays": 5,
+
+  // Custom description → activity-type rules, checked before the built-in
+  // defaults (Hebrew interest/fee phrasings) and before the plain
+  // sign-based fallback. Use these to route a specific recurring merchant
+  // string to something other than the default WITHDRAWAL/DEPOSIT/CREDIT.
+  // See README.md → "How transactions map" for the full list of valid
+  // activityType values and which ones a given account type (CASH vs.
+  // CREDIT_CARD) actually surfaces in Wealthfolio's spending reports —
+  // picking the wrong one here does not error, it just silently drops the
+  // row from spending. Optional — defaults to [].
+  "rules": [
+    {
+      // Case-insensitive substring match against the transaction
+      // description exactly as the bank/card issuer wrote it (Hebrew is
+      // fine and expected).
+      "pattern": "ריבית זכות",
+      // One of: DEPOSIT, WITHDRAWAL, CREDIT, INTEREST, FEE, TAX,
+      // TRANSFER_IN, TRANSFER_OUT.
+      "activityType": "INTEREST"
+      // "subtype" is optional here. It only matters for a CREDIT on a CASH
+      // account, where Wealthfolio ignores a subtype-less CREDIT — see
+      // README.md for the exact list of subtypes it will accept.
+    }
+  ],
+
+  // Declares which CASH (bank) account pays off which CREDIT_CARD account,
+  // so the importer can link the bank's monthly charge to the card's own
+  // purchases as one internal transfer instead of importing both as
+  // separate spending — see README.md → "Card payments and double
+  // counting". Without an entry here for a given card, every shekel spent
+  // on that card is counted twice: once as card spending, once as a bank
+  // withdrawal. Optional — defaults to [].
+  "cardPayments": [
+    {
+      // Case-insensitive substring matched against the *bank-side*
+      // transaction's description — use the issuer name exactly as your
+      // bank statement writes it (e.g. ישראכרט, כאל, מקס, לאומי קארד,
+      // אמריקן אקספרס, דיינרס).
+      "pattern": "ישראכרט",
+      // The Wealthfolio account id of the CREDIT_CARD account this bank
+      // debit is paying off — must match a "wealthfolioAccountId" declared
+      // under some provider's "accounts" below.
+      "wealthfolioAccountId": "wf-acc-isracard-card"
+    }
+  ],
+
+  // One entry per bank or card-issuer login. Each provider's "credentials"
+  // shape is fixed by its "companyId" (israeli-bank-scrapers uses a
+  // different field set per company) — see README.md → "Provider support
+  // matrix" for the exact fields every supported company needs. A wrong
+  // shape here is rejected at startup, naming the missing field, rather
+  // than failing mid-scrape inside a browser.
+  "providers": [
+    {
+      // Your own label for this entry. Used only in logs and the run
+      // summary — pick anything that helps you tell providers apart.
+      "id": "my-hapoalim",
+
+      // The israeli-bank-scrapers company id for Bank Hapoalim.
+      "companyId": "hapoalim",
+
+      // hapoalim needs { userCode, password }: the login code and
+      // password you use on the bank's own site (userCode is not always
+      // the same as your ID number — it's whatever you type into
+      // Hapoalim's own login page).
+      "credentials": {
+        "userCode": "<hapoalim-user-code>",
+        "password": "<hapoalim-password>"
+      },
+
+      // Maps each bank account number — exactly as the scraper reports it,
+      // which matches what you see in the bank's own online banking — to
+      // the Wealthfolio account it should import into. An account that is
+      // scraped but missing here is skipped and called out in the run
+      // summary; the importer never auto-creates a Wealthfolio account,
+      // because account numbers aren't stable enough across providers to
+      // risk creating duplicates unattended.
+      "accounts": {
+        "12-345-678901": {
+          // The target Wealthfolio account's id. Find it in Wealthfolio's
+          // account settings (or the URL when viewing that account).
+          "wealthfolioAccountId": "wf-acc-hapoalim-checking",
+          // CASH for a bank account, CREDIT_CARD for a card account. This
+          // controls both how amounts net (see README.md → "How
+          // transactions map") and which activity types are even valid
+          // for the account.
+          "type": "CASH"
+        }
+      }
+    },
+    {
+      "id": "my-isracard",
+
+      // The israeli-bank-scrapers company id for Isracard.
+      "companyId": "isracard",
+
+      // isracard needs { id, password, card6Digits }: your ID number, the
+      // site's login password, and the last 6 digits printed on the
+      // physical card.
+      "credentials": {
+        "id": "<isracard-id-number>",
+        "password": "<isracard-password>",
+        "card6Digits": "<last-6-digits-of-the-card>"
+      },
+
+      "accounts": {
+        "1234": {
+          "wealthfolioAccountId": "wf-acc-isracard-card",
+          "type": "CREDIT_CARD"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+name: Provider request
+description: Ask for a bank/card issuer to be supported, or for an OTP-only provider to gain unattended support.
+title: "[provider]: "
+labels: ["provider"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Provider support in this project is bounded by what
+        [israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers)
+        itself supports — this project can only wire up a `companyId`
+        israeli-bank-scrapers already knows how to log in to. If your
+        provider isn't in israeli-bank-scrapers at all, this project can't
+        add it until that upstream project does.
+
+  - type: input
+    id: company
+    attributes:
+      label: Company / provider name
+      placeholder: e.g. Bank Hapoalim, Isracard, One Zero
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What's the request?
+      options:
+        - A company israeli-bank-scrapers already supports, but this project doesn't map yet
+        - A company neither israeli-bank-scrapers nor this project supports yet
+        - Unattended support for an OTP-only company already listed as unsupported (oneZero, behatsdaa)
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: upstream-link
+    attributes:
+      label: Upstream israeli-bank-scrapers reference
+      description: >
+        If you know it, a link to the company in israeli-bank-scrapers'
+        own docs/source (its `CompanyTypes` / `SCRAPERS` definitions), or to
+        an upstream issue requesting it.
+      placeholder: https://github.com/eshaham/israeli-bank-scrapers/...
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else useful?
+      description: >
+        For an OTP-only provider, note whether you'd be willing to use
+        israeli-bank-scrapers' `otpLongTermToken` flow (log in interactively
+        once, reuse the token afterward) if it were wired up — that's one of
+        the two candidate approaches under consideration.
+    validations:
+      required: false
