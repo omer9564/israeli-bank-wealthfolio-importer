@@ -10,7 +10,7 @@
   "scripts": {
     "check": "ultracite check",
     "fix": "ultracite fix",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p packages/core --noEmit",
     "test": "bun test"
   },
   "devDependencies": {
