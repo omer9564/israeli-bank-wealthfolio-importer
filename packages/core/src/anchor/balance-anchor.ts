@@ -25,6 +25,8 @@ export interface AnchorInput {
   accountType: WealthfolioAccountType;
   activities: ActivityImport[];
   balanceDate?: string;
+  /** The scraped account's own currency. Only activities in this currency net against `scrapedBalance`. */
+  currency: string;
   scrapedBalance: number;
 }
 
@@ -38,18 +40,34 @@ export interface AnchorInput {
  * Re-anchoring on later runs would fight the transactions and compound drift.
  */
 export function buildAnchor(input: AnchorInput): ActivityImport | null {
-  const first = input.activities[0];
+  // The scraper's reported balance is a plain number with no runtime
+  // validation, so an upstream parse miss can hand us NaN/Infinity here
+  // despite the declared `number` type — same rationale as the
+  // Number.isFinite guard on chargedAmount in mapTransaction. Reject it
+  // rather than posting a corrupt amount (NaN serializes to `null`) to
+  // Wealthfolio.
+  if (!Number.isFinite(input.scrapedBalance)) {
+    return null;
+  }
+
+  // The scraped balance is denominated in the account's own currency, so
+  // only same-currency activities legitimately net against it — mixing in
+  // other currencies would sum unrelated magnitudes as if they were fungible.
+  const sameCurrency = input.activities.filter(
+    (activity) => activity.currency === input.currency
+  );
+  const first = sameCurrency[0];
   if (first === undefined) {
     return null;
   }
 
   const difference =
-    input.scrapedBalance - netEffect(input.activities, input.accountType);
+    input.scrapedBalance - netEffect(sameCurrency, input.accountType);
   if (Math.abs(difference) < EPSILON) {
     return null;
   }
 
-  const earliest = input.activities.reduce(
+  const earliest = sameCurrency.reduce(
     (min, activity) => (activity.date < min ? activity.date : min),
     first.date
   );
@@ -63,7 +81,7 @@ export function buildAnchor(input: AnchorInput): ActivityImport | null {
     activityType: difference > 0 ? "DEPOSIT" : "WITHDRAWAL",
     date: anchorDate,
     amount: Math.abs(difference),
-    currency: first.currency,
+    currency: input.currency,
     fee: 0,
     comment: `Opening balance anchor — ${label}`,
     isDraft: false,

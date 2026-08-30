@@ -39,6 +39,7 @@ describe("buildAnchor", () => {
     const anchor = buildAnchor({
       accountId: "acc-1",
       accountType: "CASH",
+      currency: "ILS",
       scrapedBalance: 1000,
       balanceDate: "2026-08-20",
       activities,
@@ -58,6 +59,7 @@ describe("buildAnchor", () => {
     const anchor = buildAnchor({
       accountId: "acc-1",
       accountType: "CASH",
+      currency: "ILS",
       scrapedBalance: 100,
       activities,
     });
@@ -69,6 +71,7 @@ describe("buildAnchor", () => {
       buildAnchor({
         accountId: "acc-1",
         accountType: "CASH",
+        currency: "ILS",
         scrapedBalance: 300,
         activities,
       })
@@ -80,8 +83,64 @@ describe("buildAnchor", () => {
       buildAnchor({
         accountId: "acc-1",
         accountType: "CASH",
+        currency: "ILS",
         scrapedBalance: 300,
         activities: [],
+      })
+    ).toBeNull();
+  });
+
+  test("nets only the account's currency in a mixed-currency batch", () => {
+    const mixed = [
+      activity({ activityType: "DEPOSIT", amount: 500, currency: "ILS" }),
+      activity({ amount: 200, currency: "ILS" }),
+      activity({
+        activityType: "DEPOSIT",
+        amount: 9999,
+        currency: "USD",
+        date: "2026-08-05T00:00:00.000Z",
+      }),
+    ];
+
+    const anchor = buildAnchor({
+      accountId: "acc-1",
+      accountType: "CASH",
+      currency: "ILS",
+      scrapedBalance: 1000,
+      activities: mixed,
+    });
+
+    expect(anchor).toMatchObject({
+      activityType: "DEPOSIT",
+      amount: 700,
+      currency: "ILS",
+    });
+  });
+
+  test("returns null when no activity matches the account's currency", () => {
+    const usdOnly = [
+      activity({ activityType: "DEPOSIT", amount: 500, currency: "USD" }),
+    ];
+
+    expect(
+      buildAnchor({
+        accountId: "acc-1",
+        accountType: "CASH",
+        currency: "ILS",
+        scrapedBalance: 1000,
+        activities: usdOnly,
+      })
+    ).toBeNull();
+  });
+
+  test("returns null when scrapedBalance is NaN", () => {
+    expect(
+      buildAnchor({
+        accountId: "acc-1",
+        accountType: "CASH",
+        currency: "ILS",
+        scrapedBalance: Number.NaN,
+        activities,
       })
     ).toBeNull();
   });
