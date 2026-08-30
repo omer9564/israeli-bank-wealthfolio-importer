@@ -45,8 +45,13 @@ workflow directly.
    (`workflow_dispatch`).
 
 Every run writes a summary table to the workflow's job summary and exits
-non-zero on any provider failure, so a broken scraper shows up as a normal
-GitHub Actions failure notification.
+non-zero when something went wrong, so it shows up as a normal GitHub Actions
+failure notification. A run fails if any provider failed to scrape, if
+Wealthfolio's own validation rejected rows (which would otherwise mean a run
+that imported nothing and still looked green), if a transaction's amount came
+back unparsable, or if a detected card-payment pair could not be linked — see
+**Card payments and double counting** for why that last one matters. Pending
+transactions being skipped is routine and never fails a run.
 
 See **Security** below before deciding whether a GitHub-hosted runner is the
 right place to hold your bank credentials.
@@ -74,7 +79,7 @@ For running the importer yourself instead of on GitHub's runners:
 3. `docker compose up -d`
 
 `daemon` mode loops forever, running a sync every `IBW_INTERVAL_HOURS` (default
-`12`) and logging each run's summary. Use `command: ["sync"]` instead for a
+`12`, accepted range 1–168) and logging each run's summary. Use `command: ["sync"]` instead for a
 single run you trigger yourself (e.g. from cron or a systemd timer on the
 host).
 
@@ -142,7 +147,7 @@ in Wealthfolio's spending reports.
 | `IBW_DAYS_BACK` | config resolution | Overrides `daysBack`. This is how the Action's `days-back` input reaches the CLI. |
 | `IBW_DRY_RUN` | CLI | `"true"` writes CSVs to `IBW_OUT_DIR` instead of pushing to Wealthfolio. **Still performs a real bank login and scrape** — see Limitations. |
 | `IBW_OUT_DIR` | CLI | Where dry-run CSVs are written. Default `./out`. |
-| `IBW_INTERVAL_HOURS` | CLI (`daemon` command) | Hours between runs in daemon mode. Default `12`. |
+| `IBW_INTERVAL_HOURS` | CLI (`daemon` command) | Hours between runs in daemon mode. Default `12`; must be between 1 and 168. Anything else (including an empty value) fails at startup rather than defaulting, because an unvalidated interval collapses to a continuous scrape loop. |
 | `PUPPETEER_EXECUTABLE_PATH` | scraper | Path to the Chromium binary. Set inside the Docker image; you shouldn't need to set this yourself. |
 | `GITHUB_STEP_SUMMARY` | CLI | Set automatically by GitHub Actions; when present, the run summary is also appended there. |
 
@@ -230,9 +235,11 @@ Two silent traps this mapping exists specifically to avoid:
 
 Other field-level choices worth knowing: `fee` is always `0` (Israeli
 scrapers report fees as separate transactions, not as a fee on another one);
-`comment` carries the original Hebrew description plus memo, installment
-counter (`תשלום N/M`), and the bank's own reference number (אסמכתא) when
-present — it's the only place that text survives, and it's what Wealthfolio's
+`comment` carries the original Hebrew description plus memo, the original
+amount and currency when the charge was converted (e.g. `30 USD`, added
+whenever `originalCurrency` differs from the currency actually billed),
+installment counter (`תשלום N/M`), and the bank's own reference number
+(אסמכתא) when present — it's the only place that text survives, and it's what Wealthfolio's
 own categorization rules match against; installments are imported on their
 own charge dates rather than combined into one lump sum, because that's what
 actually leaves the account each month.
@@ -255,12 +262,15 @@ Declare each pairing in `cardPayments`:
 
 `pattern` is matched against the **bank-side** transaction's `comment` — not
 just the raw scraped description, but the same built comment Wealthfolio
-ends up seeing (description plus memo, installment counter, and reference
-number; see **How transactions map**). In practice the description is always
+ends up seeing (description plus memo, the original amount and currency when
+the charge was converted, installment counter, and reference number; see
+**How transactions map**). In practice the description is always
 a prefix of `comment`, so matching the issuer name as your bank statement
 writes it works the same either way: ישראכרט, כאל, מקס, לאומי קארד, אמריקן
 אקספרס, דיינרס, …. `wealthfolioAccountId` must be the `CREDIT_CARD` account
-that debit pays off.
+that debit pays off, and it must be one of the ids you declared under some
+provider's `accounts` — a typo there is rejected at startup rather than
+turning into a puzzling "could not be paired" line at the end of a run.
 
 When a bank debit matches a `cardPayments` pattern, the importer looks for a
 card-side `CREDIT` of the same amount and currency within `transferWindowDays`
@@ -287,6 +297,16 @@ days. There are three possible outcomes:
   you already told it exists. Expect to see this on most card payments; it
   is not a bug and not something scraped in error.
 
+Whichever outcome applies, the linking itself has to succeed. Both legs are
+imported first and then linked in a second call, and if Wealthfolio returns no
+id for one of them — most often because that leg was already present and got
+deduplicated — the pair stays unlinked. That is not cosmetic: the synthesized
+card-side leg is still written, nothing nets against it, and because the
+importer keeps no state, nothing will ever undo it. So the run **fails** and
+the summary names the count, telling you to find those rows on the card
+account (their comment ends in `· תשלום לכרטיס`) and link or delete them by
+hand.
+
 All of this only happens when `linkTransfers` is true (the default). Without
 any `cardPayments` entries at all, no linking is attempted and card payments
 are not deduplicated — this is only safe if you're importing bank accounts
@@ -307,6 +327,17 @@ rounding noise — writes one extra `DEPOSIT` or `WITHDRAWAL` row for the
 difference, commented `Opening balance anchor — <date>`. You'll see this row
 exactly once per account, the first time it syncs; after that, the account
 already has activities, so anchoring never runs again for it.
+
+On a `CASH` account the anchor is a `DEPOSIT`, and Wealthfolio's classifier
+counts a deposit as **income** — so a first sync books your whole opening
+balance as that month's income, and the month a new account is added will look
+anomalous in income reports until you scroll past it. On a `CREDIT_CARD`
+account the anchor can only ever be a `WITHDRAWAL`: if the correction would
+need to go the other way (a paid-off or in-credit card, which is common), the
+importer refuses to write it, because the only row that would fit is a
+`DEPOSIT`, which Wealthfolio ignores on a card. The run summary says so, once,
+naming the account — add the opening balance by hand in Wealthfolio if you
+want that account to start from the right number.
 
 Anchoring only ever happens on that first sync. Balance drift on later runs
 (a scraper's reported balance disagreeing with Wealthfolio's own running

@@ -4,3 +4,6 @@ dist
 .env
 *.local
 out
+
+# Agent execution plans: working scaffolding, not documentation.
+docs/superpowers/plans/
