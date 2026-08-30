@@ -1,0 +1,101 @@
+import { describe, expect, test } from "bun:test";
+import type { ScrapedTransaction } from "../types";
+import { buildComment, mapTransaction } from "./map-transaction";
+import { DEFAULT_RULES } from "./rules";
+
+function txn(over: Partial<ScrapedTransaction> = {}): ScrapedTransaction {
+  return {
+    type: "normal",
+    date: "2026-08-01T00:00:00.000Z",
+    processedDate: "2026-08-01T00:00:00.000Z",
+    originalAmount: -120.5,
+    originalCurrency: "ILS",
+    chargedAmount: -120.5,
+    chargedCurrency: "ILS",
+    description: "שופרסל דיל",
+    status: "completed",
+    ...over,
+  };
+}
+
+const cash = {
+  accountId: "acc-1",
+  accountType: "CASH" as const,
+  fallbackCurrency: "ILS",
+  rules: DEFAULT_RULES,
+};
+
+describe("buildComment", () => {
+  test("keeps the Hebrew description intact", () => {
+    expect(buildComment(txn())).toBe("שופרסל דיל");
+  });
+
+  test("appends memo, installment counter and asmachta", () => {
+    const comment = buildComment(
+      txn({
+        memo: "סניף 42",
+        installments: { number: 2, total: 12 },
+        identifier: 998_877,
+      })
+    );
+    expect(comment).toBe("שופרסל דיל · סניף 42 · תשלום 2/12 · אסמכתא 998877");
+  });
+
+  test("records the original amount when the charge was converted", () => {
+    const comment = buildComment(
+      txn({
+        originalAmount: -30,
+        originalCurrency: "USD",
+        chargedCurrency: "ILS",
+      })
+    );
+    expect(comment).toBe("שופרסל דיל · 30 USD");
+  });
+});
+
+describe("mapTransaction", () => {
+  test("maps a cash outflow to an unsigned WITHDRAWAL", () => {
+    const activity = mapTransaction(txn(), cash);
+    expect(activity).toMatchObject({
+      accountId: "acc-1",
+      activityType: "WITHDRAWAL",
+      amount: 120.5,
+      currency: "ILS",
+      fee: 0,
+      isDraft: false,
+    });
+  });
+
+  test("maps a cash inflow to DEPOSIT", () => {
+    expect(
+      mapTransaction(txn({ chargedAmount: 9000, description: "משכורת" }), cash)
+    ).toMatchObject({ activityType: "DEPOSIT", amount: 9000 });
+  });
+
+  test("skips pending transactions", () => {
+    expect(mapTransaction(txn({ status: "pending" }), cash)).toBeNull();
+  });
+
+  test("skips zero-amount transactions", () => {
+    expect(mapTransaction(txn({ chargedAmount: 0 }), cash)).toBeNull();
+  });
+
+  test("falls back to the account currency when the charge has none", () => {
+    const activity = mapTransaction(txn({ chargedCurrency: undefined }), {
+      ...cash,
+      fallbackCurrency: "USD",
+    });
+    expect(activity?.currency).toBe("USD");
+  });
+
+  test("maps a card refund to CREDIT, never DEPOSIT", () => {
+    const activity = mapTransaction(
+      txn({ chargedAmount: 55, description: "זיכוי" }),
+      {
+        ...cash,
+        accountType: "CREDIT_CARD",
+      }
+    );
+    expect(activity?.activityType).toBe("CREDIT");
+  });
+});
