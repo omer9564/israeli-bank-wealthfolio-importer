@@ -1,0 +1,43 @@
+name: import
+
+on:
+  workflow_call:
+    inputs:
+      days-back:
+        type: string
+        default: "30"
+      dry-run:
+        type: boolean
+        default: false
+    secrets:
+      IBW_CONFIG:
+        required: true
+      WEALTHFOLIO_URL:
+        required: false
+      WEALTHFOLIO_PASSWORD:
+        required: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: omer9564/israeli-bank-wealthfolio-importer@v1
+        with:
+          days-back: ${{ inputs.days-back }}
+          dry-run: ${{ inputs.dry-run }}
+        env:
+          IBW_CONFIG: ${{ secrets.IBW_CONFIG }}
+          WEALTHFOLIO_URL: ${{ secrets.WEALTHFOLIO_URL }}
+          WEALTHFOLIO_PASSWORD: ${{ secrets.WEALTHFOLIO_PASSWORD }}
+
+      # A successful dry run is the normal case someone wants the CSVs for
+      # (reviewing what would have been imported); a failed one may still
+      # have written partial CSVs worth inspecting while debugging. Only a
+      # non-dry-run has nothing in out/ to upload.
+      - if: always() && inputs.dry-run
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wealthfolio-csv
+          path: out/
+          if-no-files-found: ignore

@@ -17,6 +17,10 @@ const noFile = () => Promise.reject(new Error("no file"));
 
 const IBW_CONFIG_MENTIONED = /IBW_CONFIG/;
 const COULD_NOT_BE_PARSED = /could not be parsed/i;
+const IBW_CONFIG_SET_BUT_EMPTY = /IBW_CONFIG is set but empty/;
+const IBW_CONFIG_PATH_SET_BUT_EMPTY = /IBW_CONFIG_PATH is set but empty/;
+const PASSWORD_REQUIRED = /WEALTHFOLIO_PASSWORD is not/;
+const URL_REQUIRED = /WEALTHFOLIO_URL is not/;
 
 describe("resolveConfig", () => {
   test("reads inline JSON from IBW_CONFIG", async () => {
@@ -70,5 +74,55 @@ describe("resolveConfig", () => {
     await expect(
       resolveConfig({ env: { IBW_CONFIG: "{oops" }, readFile: noFile })
     ).rejects.toThrow(COULD_NOT_BE_PARSED);
+  });
+
+  test("rejects IBW_CONFIG set but empty instead of silently falling through", async () => {
+    await expect(
+      resolveConfig({
+        env: { IBW_CONFIG: "", IBW_CONFIG_PATH: "/cfg.json" },
+        readFile: (path) =>
+          path === "/cfg.json" ? Promise.resolve(raw) : noFile(),
+      })
+    ).rejects.toThrow(IBW_CONFIG_SET_BUT_EMPTY);
+  });
+
+  test("rejects IBW_CONFIG_PATH set but empty instead of silently falling through", async () => {
+    await expect(
+      resolveConfig({
+        env: {
+          IBW_CONFIG_PATH: "",
+          WEALTHFOLIO_URL: "u",
+          WEALTHFOLIO_PASSWORD: "p",
+        },
+        readFile: noFile,
+        fetchRemote: () => Promise.resolve(raw),
+      })
+    ).rejects.toThrow(IBW_CONFIG_PATH_SET_BUT_EMPTY);
+  });
+
+  test("rejects WEALTHFOLIO_URL set without WEALTHFOLIO_PASSWORD instead of silently discarding it", async () => {
+    await expect(
+      resolveConfig({
+        env: { IBW_CONFIG: raw, WEALTHFOLIO_URL: "http://other:9000" },
+        readFile: noFile,
+      })
+    ).rejects.toThrow(PASSWORD_REQUIRED);
+  });
+
+  test("rejects WEALTHFOLIO_PASSWORD set without WEALTHFOLIO_URL instead of silently discarding it", async () => {
+    await expect(
+      resolveConfig({
+        env: { IBW_CONFIG: raw, WEALTHFOLIO_PASSWORD: "other" },
+        readFile: noFile,
+      })
+    ).rejects.toThrow(URL_REQUIRED);
+  });
+
+  test("honours IBW_DAYS_BACK from the action input", async () => {
+    const config = await resolveConfig({
+      env: { IBW_CONFIG: raw, IBW_DAYS_BACK: "7" },
+      readFile: noFile,
+    });
+    expect(config.daysBack).toBe(7);
   });
 });

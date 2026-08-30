@@ -31,5 +31,9 @@ RUN useradd --create-home --shell /usr/sbin/nologin importer \
  && chown -R importer:importer /app
 USER importer
 
-ENTRYPOINT ["bun", "apps/cli/src/index.ts"]
+# Absolute path: GitHub Actions runs Docker container actions with the working
+# directory forced to GITHUB_WORKSPACE (the consumer's checkout, not /app), so a
+# path relative to WORKDIR would fail to resolve on every invocation as an Action.
+# https://docs.github.com/en/actions/sharing-automations/creating-actions/dockerfile-support-for-github-actions
+ENTRYPOINT ["bun", "/app/apps/cli/src/index.ts"]
 CMD ["sync"]

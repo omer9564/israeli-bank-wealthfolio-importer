@@ -1,0 +1,23 @@
+name: Israeli Bank → Wealthfolio Importer
+description: Scrape Israeli bank and credit-card transactions into a self-hosted Wealthfolio.
+branding:
+  icon: download
+  color: blue
+
+inputs:
+  days-back:
+    description: How many days of history to rescan each run.
+    required: false
+    default: "30"
+  dry-run:
+    description: Write CSVs to out/ instead of pushing to Wealthfolio.
+    required: false
+    default: "false"
+
+runs:
+  using: docker
+  image: docker://ghcr.io/omer9564/israeli-bank-wealthfolio-importer:v1
+  args: ["sync"]
+  env:
+    IBW_DAYS_BACK: ${{ inputs.days-back }}
+    IBW_DRY_RUN: ${{ inputs.dry-run }}
