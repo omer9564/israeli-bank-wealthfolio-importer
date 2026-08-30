@@ -3,6 +3,7 @@ import { parseConfig } from "./schema";
 
 const USER_CODE_FIELD = /userCode/;
 const ONE_ZERO_PROVIDER = /oneZero/;
+const USERNAME_FIELD = /username/;
 
 const base = {
   wealthfolio: { url: "http://localhost:8080", password: "pw" },
@@ -81,5 +82,56 @@ describe("parseConfig", () => {
       cardPayments: [{ pattern: "ישראכרט", wealthfolioAccountId: "acc-2" }],
     });
     expect(config.cardPayments[0]?.pattern).toBe("ישראכרט");
+  });
+
+  test("accepts pagi credentials with username and password", () => {
+    const config = parseConfig({
+      ...base,
+      providers: [
+        {
+          id: "pagi-bank",
+          companyId: "pagi",
+          credentials: { username: "u", password: "p" },
+          accounts: {
+            "1234": { wealthfolioAccountId: "acc-3", type: "CASH" },
+          },
+        },
+      ],
+    });
+    expect(config.providers[0]?.companyId).toBe("pagi");
+  });
+
+  test("accepts beyahadBishvilha credentials with id and password, and does not reject it as OTP-only", () => {
+    const config = parseConfig({
+      ...base,
+      providers: [
+        {
+          id: "byb",
+          companyId: "beyahadBishvilha",
+          credentials: { id: "1", password: "p" },
+          accounts: {
+            "1234": { wealthfolioAccountId: "acc-4", type: "CASH" },
+          },
+        },
+      ],
+    });
+    expect(config.providers[0]?.companyId).toBe("beyahadBishvilha");
+  });
+
+  test("rejects pagi credentials of the wrong shape, naming the field", () => {
+    const bad = {
+      ...base,
+      providers: [
+        {
+          id: "pagi-bank",
+          companyId: "pagi",
+          credentials: { userCode: "u", password: "p" },
+          accounts: {
+            "1234": { wealthfolioAccountId: "acc-3", type: "CASH" },
+          },
+        },
+      ],
+    };
+    expect(() => parseConfig(bad)).toThrow(USERNAME_FIELD);
   });
 });

@@ -42,12 +42,14 @@ const CREDENTIALS_BY_COMPANY = {
   union: username,
   beinleumi: username,
   massad: username,
+  pagi: username,
   yahav: usernameNationalId,
   visaCal: username,
   max: username,
   isracard: idPasswordCard6,
   amex: idPasswordCard6,
   behatsdaa: idPassword,
+  beyahadBishvilha: idPassword,
   oneZero: z.object({ email: z.email(), password: z.string().min(1) }),
 } as const;
 
