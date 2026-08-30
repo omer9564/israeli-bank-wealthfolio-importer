@@ -13,5 +13,7 @@ jobs:
     uses: ./.github/workflows/node-ci.yml
   docker:
     uses: ./.github/workflows/docker-build.yml
+    permissions:
+      contents: read
     with:
       push: false

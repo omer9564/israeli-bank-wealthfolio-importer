@@ -11,11 +11,15 @@ on:
         default: ""
 
 jobs:
+  # Permissions are intentionally granted per-caller, not here: a reusable
+  # workflow can only have its GITHUB_TOKEN permissions downgraded by the
+  # caller, never elevated, and fork PRs always get a read-only token
+  # regardless of what this job declares. A static `packages: write` here
+  # would make GitHub reject the run before any step executes, for every
+  # fork PR. Each caller in pull-request.yml/push.yml grants exactly what
+  # it needs instead — do not reinstate a block here.
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
