@@ -64,7 +64,8 @@ a property of the program rather than of one call site.
 the parsed configuration*, so it can only mask secrets it has already been
 told about. Anything that fails before the configuration parses is outside
 it. Rather than rely on the redactor there, those paths are built so their
-messages cannot contain your input at all:
+messages cannot contain your input at all — with one deliberate exception,
+called out below:
 
 - A malformed `IBW_CONFIG` reports only that it is not valid JSON. The
   parser's own message is deliberately discarded, because on this runtime it
@@ -77,8 +78,11 @@ messages cannot contain your input at all:
   response body, because that body *is* the configuration document. Other
   endpoints' error bodies are capped rather than dropped; they carry activity
   data, not credentials.
-- Configuration validation errors name the offending field and never echo the
-  value at it.
+- Configuration validation errors name the offending field and never echo a
+  credential value. One check is the exception: a `cardPayments` entry whose
+  `wealthfolioAccountId` names no declared account has that id echoed back
+  in the error, so you can tell which entry is wrong. It is a Wealthfolio
+  account id, not a secret, so the tradeoff is deliberate.
 
 Before a configuration exists the redactor is still seeded with the values
 the environment is known to carry (`WEALTHFOLIO_PASSWORD`, and the raw

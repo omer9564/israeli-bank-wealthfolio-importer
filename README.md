@@ -300,12 +300,15 @@ days. There are three possible outcomes:
 Whichever outcome applies, the linking itself has to succeed. Both legs are
 imported first and then linked in a second call, and if Wealthfolio returns no
 id for one of them — most often because that leg was already present and got
-deduplicated — the pair stays unlinked. That is not cosmetic: the synthesized
-card-side leg is still written, nothing nets against it, and because the
-importer keeps no state, nothing will ever undo it. So the run **fails** and
-the summary names the count, telling you to find those rows on the card
-account (their comment ends in `· תשלום לכרטיס`) and link or delete them by
-hand.
+deduplicated — the pair stays unlinked. That is not cosmetic: whichever leg
+was written — the synthesized one, or a matched pre-existing card credit —
+keeps moving the card balance with nothing netting against it, and because
+the importer keeps no state, nothing will ever undo it. So the run **fails**
+and the summary names the count, telling you to find the **unlinked**
+`TRANSFER_IN` row(s) on the card account whose amount and date match the bank
+debit. Some — not all — will have a comment ending in `· תשלום לכרטיס`; that
+suffix only marks a row the importer created, so treat it as a hint rather
+than the identifying trait, and link or delete the affected rows by hand.
 
 All of this only happens when `linkTransfers` is true (the default). Without
 any `cardPayments` entries at all, no linking is attempted and card payments

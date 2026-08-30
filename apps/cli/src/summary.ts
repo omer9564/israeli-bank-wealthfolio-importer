@@ -59,8 +59,11 @@ function renderTransferWarnings(report: RunReport): string[] {
         "could not be linked, because Wealthfolio returned no activity id for at " +
         "least one leg (usually because that leg was already present and was " +
         "deduplicated). Card spending may be double-counted until this is " +
-        "resolved: find the unlinked rows on the card account (their comment ends " +
-        "in `· תשלום לכרטיס`) and either link or delete them by hand.",
+        "resolved: on the card account, find the **unlinked** `TRANSFER_IN` " +
+        "row(s) whose amount and date match the bank debit, and either link or " +
+        "delete them by hand. Some — not all — will have a comment ending in " +
+        "`· תשלום לכרטיס`; that suffix only marks a row the importer created, " +
+        "so treat it as a hint, not the way to identify the row.",
     ];
   }
   return [
@@ -103,7 +106,10 @@ function renderCardPaymentWarnings(report: RunReport): string[] {
       "⚠️ These `cardPayments` accounts were not part of this run, so the bank " +
         `debits naming them were left unlinked: ${report.missingCardAccountIds.join(", ")}. ` +
         "Check the id for typos, or that the provider owning that card is in this " +
-        "configuration and scraped successfully."
+        "configuration and scraped successfully. Those debits are imported as " +
+        "ordinary spending (a plain `WITHDRAWAL`), not held back — if an earlier " +
+        "run already linked the same debit as a transfer, both will now persist " +
+        "as a duplicate."
     );
   }
   if (report.ambiguousCardPayments > 0) {
