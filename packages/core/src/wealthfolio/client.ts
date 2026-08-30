@@ -2,6 +2,8 @@ import type { ActivityImport } from "../types";
 
 const SESSION_COOKIE_PATTERN = /(?:^|[;,\s])wf_session=([^;,\s]+)/;
 const TRAILING_SLASHES_PATTERN = /\/+$/;
+/** An error body is a debugging aid, not a payload: cap what reaches a log. */
+const MAX_ERROR_BODY_CHARS = 200;
 
 export interface ImportSummary {
   duplicates: number;
@@ -70,11 +72,19 @@ export class WealthfolioClient {
     this.token = token;
   }
 
+  /**
+   * `echoBody` decides whether a failure quotes the response body. It is off
+   * for the addon secret store, whose body IS the configuration document and
+   * therefore every bank credential in it. Elsewhere the body is activity
+   * data, and a capped excerpt is worth far more than it costs when a self-
+   * hosted server rejects an import.
+   */
   private async request<T>(
     path: string,
     init: RequestInit,
-    retry = true
+    options: { echoBody?: boolean; retry?: boolean } = {}
   ): Promise<T> {
+    const { echoBody = true, retry = true } = options;
     if (this.token === null) {
       await this.login();
     }
@@ -90,11 +100,14 @@ export class WealthfolioClient {
 
     if (response.status === 401 && retry) {
       this.token = null;
-      return this.request<T>(path, init, false);
+      return this.request<T>(path, init, { echoBody, retry: false });
     }
     if (!response.ok) {
+      const detail = echoBody
+        ? `: ${(await response.text()).slice(0, MAX_ERROR_BODY_CHARS)}`
+        : "";
       throw new Error(
-        `Wealthfolio request failed with ${response.status} at ${path}: ${await response.text()}`
+        `Wealthfolio request failed with ${response.status} at ${path}${detail}`
       );
     }
     const text = await response.text();
@@ -140,11 +153,21 @@ export class WealthfolioClient {
     return (page.total ?? page.data?.length ?? 0) > 0;
   }
 
-  getSecret(addonId: string, key: string): Promise<string | null> {
+  /**
+   * Returns the already-parsed secret: a string when the addon stored the
+   * config document as text, an object when it stored it structured. Callers
+   * must NOT parse it again — `request` has done that. The endpoint's exact
+   * response shape is inferred from Wealthfolio's Rust route definitions, not
+   * confirmed against a live server (spec §16 class), which is why the return
+   * type stays `unknown` and config validation is what settles it.
+   */
+  getSecret(addonId: string, key: string): Promise<unknown> {
     const query = new URLSearchParams({ key });
-    return this.request<string | null>(
+    return this.request<unknown>(
       `/addons/${encodeURIComponent(addonId)}/secrets?${query}`,
-      { method: "GET" }
+      { method: "GET" },
+      // The body of this response is the configuration document itself.
+      { echoBody: false }
     );
   }
 }

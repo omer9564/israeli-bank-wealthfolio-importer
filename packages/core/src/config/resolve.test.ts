@@ -15,8 +15,18 @@ const raw = JSON.stringify({
 
 const noFile = () => Promise.reject(new Error("no file"));
 
+/** The rejection reason, as an Error, so a message can be asserted on. */
+async function rejectionOf(promise: Promise<unknown>): Promise<Error> {
+  try {
+    await promise;
+  } catch (thrown) {
+    return thrown as Error;
+  }
+  throw new Error("expected the promise to reject");
+}
+
 const IBW_CONFIG_MENTIONED = /IBW_CONFIG/;
-const COULD_NOT_BE_PARSED = /could not be parsed/i;
+const NOT_VALID_JSON = /is not valid JSON/i;
 const IBW_CONFIG_SET_BUT_EMPTY = /IBW_CONFIG is set but empty/;
 const IBW_CONFIG_PATH_SET_BUT_EMPTY = /IBW_CONFIG_PATH is set but empty/;
 const PASSWORD_REQUIRED = /WEALTHFOLIO_PASSWORD is not/;
@@ -73,7 +83,46 @@ describe("resolveConfig", () => {
   test("reports malformed JSON as a config error, not a crash", async () => {
     await expect(
       resolveConfig({ env: { IBW_CONFIG: "{oops" }, readFile: noFile })
-    ).rejects.toThrow(COULD_NOT_BE_PARSED);
+    ).rejects.toThrow(NOT_VALID_JSON);
+  });
+
+  test("never echoes the JSON parser's message, which quotes the bad token", async () => {
+    // Forgetting the quotes around a password while hand-editing IBW_CONFIG
+    // makes JavaScriptCore report `Unexpected identifier "<the password>"`.
+    // That message escapes redaction structurally — the redactor is built from
+    // the parsed config, and this error exists because it did not parse.
+    const leaky = '{"wealthfolio":{"password": hunter2SuperSecret}}';
+    const error = await rejectionOf(
+      resolveConfig({ env: { IBW_CONFIG: leaky }, readFile: noFile })
+    );
+
+    expect(error.message).not.toContain("hunter2SuperSecret");
+    expect(error.message).toMatch(NOT_VALID_JSON);
+  });
+
+  test("reports an unreadable config file without quoting the underlying error", async () => {
+    const error = await rejectionOf(
+      resolveConfig({
+        env: { IBW_CONFIG_PATH: "/nope.json" },
+        readFile: () =>
+          Promise.reject(Object.assign(new Error("x"), { code: "ENOENT" })),
+      })
+    );
+
+    expect(error.message).toContain("IBW_CONFIG_PATH");
+    expect(error.message).toContain("ENOENT");
+  });
+
+  test("accepts an already-parsed object from the addon secret store", async () => {
+    // `WealthfolioClient.request` JSON-parses the response, so parsing it a
+    // second time here would only work if the endpoint returned a JSON string
+    // literal — an object would break the whole addon-secret path.
+    const config = await resolveConfig({
+      env: { WEALTHFOLIO_URL: "http://wf:8080", WEALTHFOLIO_PASSWORD: "pw" },
+      readFile: noFile,
+      fetchRemote: () => Promise.resolve(JSON.parse(raw) as unknown),
+    });
+    expect(config.providers[0]?.companyId).toBe("hapoalim");
   });
 
   test("rejects IBW_CONFIG set but empty instead of silently falling through", async () => {

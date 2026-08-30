@@ -6,19 +6,53 @@ export const ADDON_CONFIG_KEY = "config";
 
 export interface ResolveDeps {
   env: Record<string, string | undefined>;
-  /** Reads the addon-scoped secret from a running Wealthfolio. */
-  fetchRemote?(url: string, password: string): Promise<string | null>;
+  /**
+   * Reads the addon-scoped secret from a running Wealthfolio. Returns the
+   * config as text, or already-parsed if the server hands back an object.
+   */
+  fetchRemote?(url: string, password: string): Promise<unknown>;
   readFile(path: string): Promise<string>;
 }
 
+/**
+ * The parser's own message is NEVER interpolated. On JavaScriptCore a
+ * malformed document reports the offending token verbatim — so
+ * `{"password": hunter2}`, an ordinary quoting mistake while hand-editing the
+ * IBW_CONFIG secret, yields `Unexpected identifier "hunter2"`. That string
+ * escapes redaction structurally: the redactor is built from the parsed
+ * config, and this error exists precisely because the config did not parse.
+ * The source name is the only thing worth saying here, and it contains no
+ * user input.
+ */
 function parseJson(raw: string, source: string): unknown {
   try {
     return JSON.parse(raw);
-  } catch (error) {
+  } catch {
     throw new Error(
-      `Configuration from ${source} could not be parsed as JSON: ${
-        error instanceof Error ? error.message : String(error)
-      }`
+      `Configuration from ${source} is not valid JSON. ` +
+        "Check it with a JSON validator; the parser's message is withheld " +
+        "because it can quote the offending text, which may be a credential."
+    );
+  }
+}
+
+/**
+ * Wraps a read failure so the message carries the errno code and the variable
+ * to look at, never the underlying library's rendering of the path.
+ */
+async function readConfigFile(
+  deps: ResolveDeps,
+  path: string
+): Promise<string> {
+  try {
+    return await deps.readFile(path);
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "read failed";
+    throw new Error(
+      `Could not read the configuration file named by IBW_CONFIG_PATH (${code}).`
     );
   }
 }
@@ -54,15 +88,15 @@ export async function resolveConfig(deps: ResolveDeps): Promise<Config> {
     );
   }
 
-  let raw: string | null = null;
+  let raw: unknown = null;
   let source = "";
 
   if (env.IBW_CONFIG) {
     raw = env.IBW_CONFIG;
     source = "IBW_CONFIG";
   } else if (env.IBW_CONFIG_PATH) {
-    raw = await deps.readFile(env.IBW_CONFIG_PATH);
-    source = `IBW_CONFIG_PATH (${env.IBW_CONFIG_PATH})`;
+    raw = await readConfigFile(deps, env.IBW_CONFIG_PATH);
+    source = "IBW_CONFIG_PATH";
   } else if (
     deps.fetchRemote &&
     env.WEALTHFOLIO_URL &&
@@ -72,14 +106,20 @@ export async function resolveConfig(deps: ResolveDeps): Promise<Config> {
     source = "the Wealthfolio addon secret store";
   }
 
-  if (raw === null) {
+  if (raw === null || raw === undefined) {
     throw new Error(
       "No configuration found. Set IBW_CONFIG (inline JSON) or IBW_CONFIG_PATH (a file), " +
         "or configure the importer in Wealthfolio and set WEALTHFOLIO_URL and WEALTHFOLIO_PASSWORD."
     );
   }
 
-  const parsed = parseJson(raw, source) as Record<string, unknown>;
+  // The addon secret store hands back whatever the server stored: a JSON
+  // string when the document was stored as text, or an object when it was
+  // stored structured. `WealthfolioClient.request` has already parsed the
+  // response body, so parsing again here would only work for the string case.
+  const parsed = (
+    typeof raw === "string" ? parseJson(raw, source) : raw
+  ) as Record<string, unknown>;
   const overridden =
     env.WEALTHFOLIO_URL && env.WEALTHFOLIO_PASSWORD
       ? {

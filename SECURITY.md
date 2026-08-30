@@ -54,7 +54,36 @@ by tests) and redacts every occurrence of each of them, as literal strings,
 out of the run summary before it is printed to the console or appended to
 `$GITHUB_STEP_SUMMARY`. Provider-level scrape failures are reported through
 that same summary, so a login error that happens to echo back a credential is
-still redacted before it reaches a log anyone can read.
+redacted before it reaches a log anyone can read.
+
+Every path that prints an error — the top-level handler and the daemon's
+per-iteration handler included — goes through that redactor, so redaction is
+a property of the program rather than of one call site.
+
+**The limit of that guarantee, stated plainly.** The redactor is built *from
+the parsed configuration*, so it can only mask secrets it has already been
+told about. Anything that fails before the configuration parses is outside
+it. Rather than rely on the redactor there, those paths are built so their
+messages cannot contain your input at all:
+
+- A malformed `IBW_CONFIG` reports only that it is not valid JSON. The
+  parser's own message is deliberately discarded, because on this runtime it
+  quotes the offending token — `{"password": hunter2}`, an ordinary quoting
+  slip, would otherwise print the password in clear. GitHub masks whole
+  secret values, not substrings, so that would appear in the job log.
+- An unreadable `IBW_CONFIG_PATH` reports the errno (`ENOENT`, `EACCES`) and
+  the variable name, not the underlying library's message.
+- A failed request to Wealthfolio's addon secret store never quotes the
+  response body, because that body *is* the configuration document. Other
+  endpoints' error bodies are capped rather than dropped; they carry activity
+  data, not credentials.
+- Configuration validation errors name the offending field and never echo the
+  value at it.
+
+Before a configuration exists the redactor is still seeded with the values
+the environment is known to carry (`WEALTHFOLIO_PASSWORD`, and the raw
+`IBW_CONFIG` document), so the two mechanisms overlap rather than leaving a
+gap between them.
 
 ## Failure screenshots are off by default
 
