@@ -20,6 +20,9 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    # This job holds bank credentials in memory. It reads nothing from the
+    # repository and writes nothing back, so it gets no token scopes at all.
+    permissions: {}
     timeout-minutes: 30
     steps:
       - uses: omer9564/israeli-bank-wealthfolio-importer@v1
