@@ -125,4 +125,20 @@ describe("detectCardPayments", () => {
     });
     expect(result.pairs).toHaveLength(0);
   });
+
+  test("reports the debit as unmatched when the declared card account is absent from this run", () => {
+    const debit = activity({});
+    const rules = [
+      { pattern: "ישראכרט", wealthfolioAccountId: "missing-card" },
+    ];
+
+    const result = detectCardPayments(buckets([debit]), {
+      cardPayments: rules,
+      windowDays: 5,
+    });
+
+    expect(result.pairs).toHaveLength(0);
+    expect(result.unmatched).toContain(debit);
+    expect(debit.activityType).toBe("WITHDRAWAL");
+  });
 });
