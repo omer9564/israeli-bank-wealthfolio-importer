@@ -161,9 +161,9 @@ config-parse time rather than failing partway through a browser session.
 | `mercantile` | Mercantile Bank | `id`, `password`, `num` | ✅ Supported |
 | `mizrahi` | Mizrahi Bank | `username`, `password` | ✅ Supported |
 | `otsarHahayal` | Bank Otsar Hahayal | `username`, `password` | ✅ Supported |
-| `union` | Union Bank | `username`, `password` | ✅ Supported |
+| `union` | Union | `username`, `password` | ✅ Supported |
 | `beinleumi` | Beinleumi | `username`, `password` | ✅ Supported |
-| `massad` | Bank Massad | `username`, `password` | ✅ Supported |
+| `massad` | Massad | `username`, `password` | ✅ Supported |
 | `pagi` | Pagi | `username`, `password` | ✅ Supported |
 | `yahav` | Bank Yahav | `username`, `nationalID`, `password` | ✅ Supported |
 | `visaCal` | Visa Cal | `username`, `password` | ✅ Supported |
@@ -253,24 +253,45 @@ Declare each pairing in `cardPayments`:
 ]
 ```
 
-`pattern` is matched against the **bank-side** transaction's description
-(case-insensitive substring — the issuer name as your bank statement writes
-it: ישראכרט, כאל, מקס, לאומי קארד, אמריקן אקספרס, דיינרס, …).
-`wealthfolioAccountId` must be the `CREDIT_CARD` account that debit pays off.
+`pattern` is matched against the **bank-side** transaction's `comment` — not
+just the raw scraped description, but the same built comment Wealthfolio
+ends up seeing (description plus memo, installment counter, and reference
+number; see **How transactions map**). In practice the description is always
+a prefix of `comment`, so matching the issuer name as your bank statement
+writes it works the same either way: ישראכרט, כאל, מקס, לאומי קארד, אמריקן
+אקספרס, דיינרס, …. `wealthfolioAccountId` must be the `CREDIT_CARD` account
+that debit pays off.
 
 When a bank debit matches a `cardPayments` pattern, the importer looks for a
 card-side `CREDIT` of the same amount and currency within `transferWindowDays`
-days. On a match, both legs become a linked `TRANSFER_OUT` / `TRANSFER_IN`
-pair, which is what makes Wealthfolio net them instead of counting both as
-spending. If more than one card-side credit could match equally well, the
-importer leaves the debit unlinked rather than guessing — a wrongly-linked
-pair is invisible and wrong forever, while an unlinked transaction just shows
-up as an ordinary expense you can fix by hand.
+days. There are three possible outcomes:
 
-Without any `cardPayments` entries at all (the default), no linking is
-attempted and card payments are not deduplicated — this is only safe if
-you're importing bank accounts with no matching card accounts in the same
-config. `linkTransfers: false` disables the whole feature explicitly.
+- **A single card-side credit matches.** Both legs become a linked
+  `TRANSFER_OUT` / `TRANSFER_IN` pair, which is what makes Wealthfolio net
+  them instead of counting both as spending.
+- **More than one card-side credit could match equally well.** The importer
+  leaves the debit unlinked rather than guessing — a wrongly-linked pair is
+  invisible and wrong forever, while an unlinked transaction just shows up as
+  an ordinary expense you can fix by hand.
+- **No card-side credit matches at all — the typical case.** Israeli card
+  issuers usually report only the individual purchases; the one monthly
+  charge that actually leaves the bank account often has no corresponding
+  line on the card statement at all. When that happens, the importer
+  **creates** a `TRANSFER_IN` activity on the declared card account that was
+  never scraped from anywhere — it exists in neither the bank's data nor the
+  card issuer's. You'll recognise it in Wealthfolio by its comment, which
+  ends in `· תשלום לכרטיס` ("card payment"), on the `CREDIT_CARD` account you
+  named in that `cardPayments` entry. This is safe specifically because you
+  declared that account yourself — the importer is never guessing which
+  account a debit belongs to, only filling in the other half of a transfer
+  you already told it exists. Expect to see this on most card payments; it
+  is not a bug and not something scraped in error.
+
+All of this only happens when `linkTransfers` is true (the default). Without
+any `cardPayments` entries at all, no linking is attempted and card payments
+are not deduplicated — this is only safe if you're importing bank accounts
+with no matching card accounts in the same config. `linkTransfers: false`
+disables the whole feature explicitly, including the synthesized leg above.
 
 ## Balance anchoring
 

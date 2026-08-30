@@ -82,13 +82,20 @@
   // separate spending — see README.md → "Card payments and double
   // counting". Without an entry here for a given card, every shekel spent
   // on that card is counted twice: once as card spending, once as a bank
-  // withdrawal. Optional — defaults to [].
+  // withdrawal. Most of the time there is nothing on the card side to link
+  // against (issuers report purchases, not the monthly charge), so this
+  // usually makes the importer CREATE a transfer-in leg on the card account
+  // rather than find one — see README.md, that's expected. Optional —
+  // defaults to [].
   "cardPayments": [
     {
       // Case-insensitive substring matched against the *bank-side*
-      // transaction's description — use the issuer name exactly as your
-      // bank statement writes it (e.g. ישראכרט, כאל, מקס, לאומי קארד,
-      // אמריקן אקספרס, דיינרס).
+      // transaction's built comment (description plus memo/installment/
+      // reference — see the "comment" note under "How transactions map" in
+      // README.md; the description is always a prefix of it, so this is
+      // usually the same as matching the description). Use the issuer name
+      // exactly as your bank statement writes it (e.g. ישראכרט, כאל, מקס,
+      // לאומי קארד, אמריקן אקספרס, דיינרס).
       "pattern": "ישראכרט",
       // The Wealthfolio account id of the CREDIT_CARD account this bank
       // debit is paying off — must match a "wealthfolioAccountId" declared

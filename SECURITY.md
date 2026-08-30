@@ -72,8 +72,14 @@ The Docker image runs as a dedicated non-root user (`uid 1001`), created
 specifically because bank credentials pass through this process and it has
 no reason to run as `root`. Dependencies (npm packages, the base image, and
 GitHub Actions themselves) are kept current via Dependabot
-(`.github/dependabot.yml`, weekly), and every GitHub Action this repository's
-own workflows call is pinned to a full commit SHA rather than a mutable tag.
+(`.github/dependabot.yml`, weekly). Every *external* GitHub Action this
+repository's own workflows call is pinned to a full commit SHA rather than a
+mutable tag. The one exception is unavoidable rather than an oversight:
+`.github/workflows/import.yml` calls this project's own composite action as
+`omer9564/israeli-bank-wealthfolio-importer@v1` — a repository cannot
+reference its own action by the commit SHA of a release that doesn't exist
+yet at the point the workflow file is written, so that one reference tracks
+the `v1` tag instead.
 
 ## Reporting a vulnerability
 
