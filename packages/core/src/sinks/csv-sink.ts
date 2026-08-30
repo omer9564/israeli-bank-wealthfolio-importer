@@ -1,6 +1,6 @@
 import type { PairPlan } from "../transfers/detect";
 import type { ActivityImport } from "../types";
-import type { Sink, WriteReport } from "./types";
+import type { LinkReport, Sink, WriteReport } from "./types";
 
 const HEADER = "date,activityType,amount,currency,fee,comment";
 const NEEDS_QUOTING_PATTERN = /[",\n]/;
@@ -62,7 +62,17 @@ export class CsvSink implements Sink {
     };
   }
 
-  link(_pairs: PairPlan[]): Promise<number> {
-    return Promise.resolve(0);
+  /**
+   * A CSV carries no activity ids, so linking cannot be expressed in it at
+   * all. The pairs are still reported as unlinked — importing this output
+   * really would double-count those card payments — but `supported: false`
+   * marks that as a limitation of the format rather than a failed run.
+   */
+  link(pairs: PairPlan[]): Promise<LinkReport> {
+    return Promise.resolve({
+      linked: 0,
+      supported: false,
+      unlinked: pairs.length,
+    });
   }
 }

@@ -87,7 +87,8 @@ describe("detectCardPayments", () => {
     });
 
     expect(result.pairs).toHaveLength(0);
-    expect(result.unmatched).toContain(debit);
+    expect(result.ambiguous.map((entry) => entry.debit)).toContain(debit);
+    expect(result.missingCardAccount).toHaveLength(0);
     expect(debit.activityType).toBe("WITHDRAWAL");
   });
 
@@ -113,7 +114,8 @@ describe("detectCardPayments", () => {
       windowDays: 5,
     });
     expect(result.pairs).toHaveLength(0);
-    expect(result.unmatched).toHaveLength(0);
+    expect(result.ambiguous).toHaveLength(0);
+    expect(result.missingCardAccount).toHaveLength(0);
     expect(debit.activityType).toBe("WITHDRAWAL");
   });
 
@@ -126,7 +128,10 @@ describe("detectCardPayments", () => {
     expect(result.pairs).toHaveLength(0);
   });
 
-  test("reports the debit as unmatched when the declared card account is absent from this run", () => {
+  test("tells a missing card account apart from an ambiguous one, and names it", () => {
+    // A typo in wealthfolioAccountId and a genuine ambiguity are fixed in
+    // different places, so collapsing them into one "unmatched" bucket sends
+    // the user hunting for card credits that do not exist.
     const debit = activity({});
     const rules = [
       { pattern: "ישראכרט", wealthfolioAccountId: "missing-card" },
@@ -138,7 +143,10 @@ describe("detectCardPayments", () => {
     });
 
     expect(result.pairs).toHaveLength(0);
-    expect(result.unmatched).toContain(debit);
+    expect(result.ambiguous).toHaveLength(0);
+    expect(result.missingCardAccount).toEqual([
+      { debit, wealthfolioAccountId: "missing-card" },
+    ]);
     expect(debit.activityType).toBe("WITHDRAWAL");
   });
 });

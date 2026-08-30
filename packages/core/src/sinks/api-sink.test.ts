@@ -93,4 +93,32 @@ describe("ApiSink", () => {
     await new ApiSink(client).write([]);
     expect(calls).toEqual([]);
   });
+
+  test("links a pair whose legs both came back with ids", async () => {
+    const { client, calls } = fakeClient();
+    const report = await new ApiSink(client).link([
+      {
+        out: activity({ id: "a" }),
+        in: activity({ id: "b" }),
+        synthesized: true,
+      },
+    ]);
+
+    expect(calls).toEqual(["link"]);
+    expect(report).toEqual({ linked: 1, supported: true, unlinked: 0 });
+  });
+
+  test("counts a pair with an id-less leg instead of silently skipping it", async () => {
+    // The bank debit is usually a server-side duplicate, so no id comes back
+    // for it — while the synthesized card leg is new and imports fine. Skipping
+    // this quietly leaves an unlinked TRANSFER_IN on a CREDIT_CARD, which
+    // Wealthfolio ignores while it still moves the balance, permanently.
+    const { client, calls } = fakeClient();
+    const report = await new ApiSink(client).link([
+      { out: activity({}), in: activity({ id: "b" }), synthesized: true },
+    ]);
+
+    expect(calls).toEqual([]);
+    expect(report).toEqual({ linked: 0, supported: true, unlinked: 1 });
+  });
 });

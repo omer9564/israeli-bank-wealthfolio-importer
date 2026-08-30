@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { ActivityImport } from "../types";
+import type { ActivityImport, WealthfolioAccountType } from "../types";
+import type { AnchorOutcome } from "./balance-anchor";
 import { buildAnchor, netEffect } from "./balance-anchor";
 
 function activity(over: Partial<ActivityImport>): ActivityImport {
@@ -14,6 +15,11 @@ function activity(over: Partial<ActivityImport>): ActivityImport {
     isDraft: false,
     ...over,
   };
+}
+
+/** The anchor row itself, or null when none was produced. */
+function anchorOf(outcome: AnchorOutcome): ActivityImport | null {
+  return outcome.ok ? outcome.anchor : null;
 }
 
 describe("netEffect", () => {
@@ -36,14 +42,16 @@ describe("buildAnchor", () => {
   ];
 
   test("emits a DEPOSIT for the shortfall, dated before the earliest activity", () => {
-    const anchor = buildAnchor({
-      accountId: "acc-1",
-      accountType: "CASH",
-      currency: "ILS",
-      scrapedBalance: 1000,
-      balanceDate: "2026-08-20",
-      activities,
-    });
+    const anchor = anchorOf(
+      buildAnchor({
+        accountId: "acc-1",
+        accountType: "CASH",
+        currency: "ILS",
+        scrapedBalance: 1000,
+        balanceDate: "2026-08-20",
+        activities,
+      })
+    );
     expect(anchor).toMatchObject({
       activityType: "DEPOSIT",
       amount: 700,
@@ -56,17 +64,19 @@ describe("buildAnchor", () => {
   });
 
   test("emits a WITHDRAWAL when imported activity overshoots the real balance", () => {
-    const anchor = buildAnchor({
-      accountId: "acc-1",
-      accountType: "CASH",
-      currency: "ILS",
-      scrapedBalance: 100,
-      activities,
-    });
+    const anchor = anchorOf(
+      buildAnchor({
+        accountId: "acc-1",
+        accountType: "CASH",
+        currency: "ILS",
+        scrapedBalance: 100,
+        activities,
+      })
+    );
     expect(anchor).toMatchObject({ activityType: "WITHDRAWAL", amount: 200 });
   });
 
-  test("returns null when the balance already matches", () => {
+  test("reports the balance as already matching rather than emitting nothing", () => {
     expect(
       buildAnchor({
         accountId: "acc-1",
@@ -75,10 +85,10 @@ describe("buildAnchor", () => {
         scrapedBalance: 300,
         activities,
       })
-    ).toBeNull();
+    ).toEqual({ ok: false, reason: "alreadyBalanced" });
   });
 
-  test("returns null when there is nothing to anchor against", () => {
+  test("reports when there is nothing to anchor against", () => {
     expect(
       buildAnchor({
         accountId: "acc-1",
@@ -87,7 +97,7 @@ describe("buildAnchor", () => {
         scrapedBalance: 300,
         activities: [],
       })
-    ).toBeNull();
+    ).toEqual({ ok: false, reason: "noActivitiesInCurrency" });
   });
 
   test("nets only the account's currency in a mixed-currency batch", () => {
@@ -102,22 +112,28 @@ describe("buildAnchor", () => {
       }),
     ];
 
-    const anchor = buildAnchor({
-      accountId: "acc-1",
-      accountType: "CASH",
-      currency: "ILS",
-      scrapedBalance: 1000,
-      activities: mixed,
-    });
+    const anchor = anchorOf(
+      buildAnchor({
+        accountId: "acc-1",
+        accountType: "CASH",
+        currency: "ILS",
+        scrapedBalance: 1000,
+        activities: mixed,
+      })
+    );
 
     expect(anchor).toMatchObject({
       activityType: "DEPOSIT",
       amount: 700,
       currency: "ILS",
     });
+    // The date must come from the ILS rows only. The USD row is the earliest
+    // in the batch, so computing it over the unfiltered list would date the
+    // anchor a day before 2026-08-05 instead of a day before 2026-08-10.
+    expect(anchor?.date).toBe("2026-08-09T00:00:00.000Z");
   });
 
-  test("returns null when no activity matches the account's currency", () => {
+  test("reports when no activity matches the account's currency", () => {
     const usdOnly = [
       activity({ activityType: "DEPOSIT", amount: 500, currency: "USD" }),
     ];
@@ -130,10 +146,10 @@ describe("buildAnchor", () => {
         scrapedBalance: 1000,
         activities: usdOnly,
       })
-    ).toBeNull();
+    ).toEqual({ ok: false, reason: "noActivitiesInCurrency" });
   });
 
-  test("returns null when scrapedBalance is NaN", () => {
+  test("reports a non-finite scraped balance rather than posting NaN", () => {
     expect(
       buildAnchor({
         accountId: "acc-1",
@@ -142,6 +158,53 @@ describe("buildAnchor", () => {
         scrapedBalance: Number.NaN,
         activities,
       })
-    ).toBeNull();
+    ).toEqual({ ok: false, reason: "nonFiniteBalance" });
+  });
+});
+
+describe("buildAnchor on a CREDIT_CARD", () => {
+  // One purchase: netEffect on a card is -300.
+  const purchases = [activity({ accountId: "card", amount: 300 })];
+
+  function cardAnchor(scrapedBalance: number, accountType?: string) {
+    return buildAnchor({
+      accountId: "card",
+      accountType: (accountType ?? "CREDIT_CARD") as WealthfolioAccountType,
+      currency: "ILS",
+      scrapedBalance,
+      activities: purchases,
+    });
+  }
+
+  test("emits a WITHDRAWAL when the card owes more than the scraped purchases", () => {
+    expect(anchorOf(cardAnchor(-500))).toMatchObject({
+      activityType: "WITHDRAWAL",
+      amount: 200,
+    });
+  });
+
+  test("refuses to anchor a paid-off card rather than emitting DEPOSIT", () => {
+    // Wealthfolio's classifier IGNORES a DEPOSIT on a credit card, so this row
+    // would import cleanly and then be invisible in every spending report
+    // while still moving the balance. Balance 0 is the common case.
+    expect(cardAnchor(0)).toEqual({
+      ok: false,
+      reason: "invalidForAccountType",
+    });
+  });
+
+  test("refuses to anchor a card in credit rather than emitting DEPOSIT", () => {
+    expect(cardAnchor(250)).toEqual({
+      ok: false,
+      reason: "invalidForAccountType",
+    });
+  });
+
+  test("still anchors the same figures on a CASH account", () => {
+    // Proves the refusal is about the account type, not about the arithmetic.
+    expect(anchorOf(cardAnchor(0, "CASH"))).toMatchObject({
+      activityType: "DEPOSIT",
+      amount: 300,
+    });
   });
 });

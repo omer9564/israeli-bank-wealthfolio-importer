@@ -4,6 +4,7 @@ import { parseConfig } from "./schema";
 const USER_CODE_FIELD = /userCode/;
 const ONE_ZERO_PROVIDER = /oneZero/;
 const USERNAME_FIELD = /username/;
+const UNDECLARED_CARD_ACCOUNT = /is not declared under any provider's accounts/;
 
 const base = {
   wealthfolio: { url: "http://localhost:8080", password: "pw" },
@@ -76,12 +77,24 @@ describe("parseConfig", () => {
     ).toThrow();
   });
 
-  test("parses card payment declarations", () => {
+  test("parses card payment declarations naming a declared account", () => {
     const config = parseConfig({
       ...base,
-      cardPayments: [{ pattern: "ישראכרט", wealthfolioAccountId: "acc-2" }],
+      cardPayments: [{ pattern: "ישראכרט", wealthfolioAccountId: "acc-1" }],
     });
     expect(config.cardPayments[0]?.pattern).toBe("ישראכרט");
+  });
+
+  test("rejects a cardPayments target that no provider declares", () => {
+    // Left to run time this surfaces as "could not be paired", which reads as
+    // a matching problem and sends the user hunting for card credits that do
+    // not exist. It is a typo, so it fails at startup.
+    expect(() =>
+      parseConfig({
+        ...base,
+        cardPayments: [{ pattern: "ישראכרט", wealthfolioAccountId: "acc-2" }],
+      })
+    ).toThrow(UNDECLARED_CARD_ACCOUNT);
   });
 
   test("accepts pagi credentials with username and password", () => {

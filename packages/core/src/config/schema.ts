@@ -109,25 +109,51 @@ const provider = z
     }
   });
 
-export const ConfigSchema = z.object({
-  wealthfolio: z.object({
-    url: z.url(),
-    password: z.string().min(1),
-  }),
-  daysBack: z.number().int().positive().default(30),
-  linkTransfers: z.boolean().default(true),
-  transferWindowDays: z.number().int().nonnegative().default(5),
-  rules: z.array(mappingRule).default([]),
-  cardPayments: z
-    .array(
-      z.object({
-        pattern: z.string().min(1),
-        wealthfolioAccountId: z.string().min(1),
-      })
-    )
-    .default([]),
-  providers: z.array(provider).min(1),
-});
+export const ConfigSchema = z
+  .object({
+    wealthfolio: z.object({
+      url: z.url(),
+      password: z.string().min(1),
+    }),
+    daysBack: z.number().int().positive().default(30),
+    linkTransfers: z.boolean().default(true),
+    transferWindowDays: z.number().int().nonnegative().default(5),
+    rules: z.array(mappingRule).default([]),
+    cardPayments: z
+      .array(
+        z.object({
+          pattern: z.string().min(1),
+          wealthfolioAccountId: z.string().min(1),
+        })
+      )
+      .default([]),
+    providers: z.array(provider).min(1),
+  })
+  .superRefine((value, ctx) => {
+    // A cardPayments entry naming an account that is declared nowhere can only
+    // ever fail at run time, and it fails as "could not be paired" — which
+    // reads as a matching problem and sends the user looking for card credits
+    // that do not exist. It is a typo, so it belongs in config validation.
+    const declared = new Set(
+      value.providers.flatMap((entry) =>
+        Object.values(entry.accounts).map(
+          (account) => account.wealthfolioAccountId
+        )
+      )
+    );
+    for (const [index, rule] of value.cardPayments.entries()) {
+      if (!declared.has(rule.wealthfolioAccountId)) {
+        ctx.addIssue({
+          code: "custom",
+          message:
+            `"${rule.wealthfolioAccountId}" is not declared under any provider's ` +
+            "accounts. Every cardPayments target must be an account this " +
+            "configuration also imports into.",
+          path: ["cardPayments", index, "wealthfolioAccountId"],
+        });
+      }
+    }
+  });
 
 export type Config = z.infer<typeof ConfigSchema>;
 export type ProviderConfig = Config["providers"][number];

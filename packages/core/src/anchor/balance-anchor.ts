@@ -1,5 +1,9 @@
-import { directionOf } from "../mapping/rules";
-import type { ActivityImport, WealthfolioAccountType } from "../types";
+import { directionOf, isTypeValidForAccount } from "../mapping/rules";
+import type {
+  ActivityImport,
+  ActivityType,
+  WealthfolioAccountType,
+} from "../types";
 
 /** Rounding guard: below this the "drift" is float noise, not a real gap. */
 const EPSILON = 0.005;
@@ -31,6 +35,22 @@ export interface AnchorInput {
 }
 
 /**
+ * Why an account produced no anchor. `alreadyBalanced` and
+ * `noActivitiesInCurrency` are ordinary non-events; `nonFiniteBalance` and
+ * `invalidForAccountType` mean the account's opening balance is genuinely
+ * missing and the run must say so.
+ */
+export type AnchorSkipReason =
+  | "alreadyBalanced"
+  | "invalidForAccountType"
+  | "nonFiniteBalance"
+  | "noActivitiesInCurrency";
+
+export type AnchorOutcome =
+  | { ok: true; anchor: ActivityImport }
+  | { ok: false; reason: AnchorSkipReason };
+
+/**
  * israeli-bank-scrapers reaches back months at most, so summed transactions never
  * equal the real balance. On an account's FIRST sync Wealthfolio's own balance is
  * zero and we know exactly what we are about to import, so the correction is
@@ -39,7 +59,7 @@ export interface AnchorInput {
  * Callers must only invoke this on a first sync (see `WealthfolioClient.hasActivities`).
  * Re-anchoring on later runs would fight the transactions and compound drift.
  */
-export function buildAnchor(input: AnchorInput): ActivityImport | null {
+export function buildAnchor(input: AnchorInput): AnchorOutcome {
   // The scraper's reported balance is a plain number with no runtime
   // validation, so an upstream parse miss can hand us NaN/Infinity here
   // despite the declared `number` type — same rationale as the
@@ -47,7 +67,7 @@ export function buildAnchor(input: AnchorInput): ActivityImport | null {
   // rather than posting a corrupt amount (NaN serializes to `null`) to
   // Wealthfolio.
   if (!Number.isFinite(input.scrapedBalance)) {
-    return null;
+    return { ok: false, reason: "nonFiniteBalance" };
   }
 
   // The scraped balance is denominated in the account's own currency, so
@@ -58,13 +78,26 @@ export function buildAnchor(input: AnchorInput): ActivityImport | null {
   );
   const first = sameCurrency[0];
   if (first === undefined) {
-    return null;
+    return { ok: false, reason: "noActivitiesInCurrency" };
   }
 
   const difference =
     input.scrapedBalance - netEffect(sameCurrency, input.accountType);
   if (Math.abs(difference) < EPSILON) {
-    return null;
+    return { ok: false, reason: "alreadyBalanced" };
+  }
+
+  const activityType: ActivityType = difference > 0 ? "DEPOSIT" : "WITHDRAWAL";
+  // An inflow anchor on a CREDIT_CARD would be a DEPOSIT, which Wealthfolio's
+  // spending classifier IGNORES on that account type — the row would import
+  // cleanly and then be invisible, while carrying zero weight in the very
+  // netEffect above that produced it. That happens for any card whose scraped
+  // balance is at or above its netted activity, i.e. every paid-off card. The
+  // remaining card inflow types (CREDIT, TRANSFER_IN) both mean something
+  // specific and wrong here, so there is no correct row to emit: refuse, and
+  // let the caller report the account as un-anchored.
+  if (!isTypeValidForAccount(activityType, input.accountType)) {
+    return { ok: false, reason: "invalidForAccountType" };
   }
 
   const earliest = sameCurrency.reduce(
@@ -77,13 +110,16 @@ export function buildAnchor(input: AnchorInput): ActivityImport | null {
   const label = input.balanceDate ?? earliest.slice(0, 10);
 
   return {
-    accountId: input.accountId,
-    activityType: difference > 0 ? "DEPOSIT" : "WITHDRAWAL",
-    date: anchorDate,
-    amount: Math.abs(difference),
-    currency: input.currency,
-    fee: 0,
-    comment: `Opening balance anchor — ${label}`,
-    isDraft: false,
+    ok: true,
+    anchor: {
+      accountId: input.accountId,
+      activityType,
+      date: anchorDate,
+      amount: Math.abs(difference),
+      currency: input.currency,
+      fee: 0,
+      comment: `Opening balance anchor — ${label}`,
+      isDraft: false,
+    },
   };
 }

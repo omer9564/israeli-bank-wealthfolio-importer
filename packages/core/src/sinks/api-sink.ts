@@ -1,7 +1,7 @@
 import type { PairPlan } from "../transfers/detect";
 import type { ActivityImport } from "../types";
 import type { WealthfolioClient } from "../wealthfolio/client";
-import type { Sink, WriteReport } from "./types";
+import type { LinkReport, Sink, WriteReport } from "./types";
 
 /**
  * `/activities/import` requires `isValid`/`isDraft`, which only the check pass
@@ -56,17 +56,28 @@ export class ApiSink implements Sink {
     };
   }
 
-  async link(pairs: PairPlan[]): Promise<number> {
+  /**
+   * A pair whose legs came back without ids cannot be linked, and swallowing
+   * that is what makes the failure invisible: the bank debit is usually a
+   * server-side duplicate (so it gets no id) while the synthesized card leg is
+   * new and imports fine, leaving an unlinked TRANSFER_IN on a CREDIT_CARD —
+   * which Wealthfolio's classifier ignores, so it overstates the card balance
+   * while appearing in no spending report. The skips are counted and returned
+   * so `runSync` can fail the run over them.
+   */
+  async link(pairs: PairPlan[]): Promise<LinkReport> {
     let linked = 0;
+    let unlinked = 0;
     for (const pair of pairs) {
       const outId = pair.out.id;
       const inId = pair.in.id;
       if (outId === undefined || inId === undefined) {
+        unlinked += 1;
         continue;
       }
       await this.client.link(outId, inId);
       linked += 1;
     }
-    return linked;
+    return { linked, supported: true, unlinked };
   }
 }

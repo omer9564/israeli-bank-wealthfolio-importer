@@ -55,8 +55,8 @@ describe("buildComment", () => {
 
 describe("mapTransaction", () => {
   test("maps a cash outflow to an unsigned WITHDRAWAL", () => {
-    const activity = mapTransaction(txn(), cash);
-    expect(activity).toMatchObject({
+    const outcome = mapTransaction(txn(), cash);
+    expect(outcome.ok && outcome.activity).toMatchObject({
       accountId: "acc-1",
       activityType: "WITHDRAWAL",
       amount: 120.5,
@@ -67,45 +67,59 @@ describe("mapTransaction", () => {
   });
 
   test("maps a cash inflow to DEPOSIT", () => {
-    expect(
-      mapTransaction(txn({ chargedAmount: 9000, description: "משכורת" }), cash)
-    ).toMatchObject({ activityType: "DEPOSIT", amount: 9000 });
+    const outcome = mapTransaction(
+      txn({ chargedAmount: 9000, description: "משכורת" }),
+      cash
+    );
+    expect(outcome.ok && outcome.activity).toMatchObject({
+      activityType: "DEPOSIT",
+      amount: 9000,
+    });
   });
 
-  test("skips pending transactions", () => {
-    expect(mapTransaction(txn({ status: "pending" }), cash)).toBeNull();
+  test("reports a pending transaction as skipped, not as an unexplained null", () => {
+    expect(mapTransaction(txn({ status: "pending" }), cash)).toEqual({
+      ok: false,
+      reason: "pending",
+    });
   });
 
-  test("skips zero-amount transactions", () => {
-    expect(mapTransaction(txn({ chargedAmount: 0 }), cash)).toBeNull();
+  test("reports a zero-amount transaction with its own reason", () => {
+    expect(mapTransaction(txn({ chargedAmount: 0 }), cash)).toEqual({
+      ok: false,
+      reason: "zeroAmount",
+    });
   });
 
-  test("skips a NaN charged amount", () => {
-    expect(mapTransaction(txn({ chargedAmount: Number.NaN }), cash)).toBeNull();
+  test("reports a NaN charged amount as a parse failure, distinct from pending", () => {
+    expect(mapTransaction(txn({ chargedAmount: Number.NaN }), cash)).toEqual({
+      ok: false,
+      reason: "nonFiniteAmount",
+    });
   });
 
-  test("skips an Infinity charged amount", () => {
+  test("reports an Infinity charged amount as a parse failure", () => {
     expect(
       mapTransaction(txn({ chargedAmount: Number.POSITIVE_INFINITY }), cash)
-    ).toBeNull();
+    ).toEqual({ ok: false, reason: "nonFiniteAmount" });
   });
 
   test("falls back to the account currency when the charge has none", () => {
-    const activity = mapTransaction(txn({ chargedCurrency: undefined }), {
+    const outcome = mapTransaction(txn({ chargedCurrency: undefined }), {
       ...cash,
       fallbackCurrency: "USD",
     });
-    expect(activity?.currency).toBe("USD");
+    expect(outcome.ok && outcome.activity.currency).toBe("USD");
   });
 
   test("maps a card refund to CREDIT, never DEPOSIT", () => {
-    const activity = mapTransaction(
+    const outcome = mapTransaction(
       txn({ chargedAmount: 55, description: "זיכוי" }),
       {
         ...cash,
         accountType: "CREDIT_CARD",
       }
     );
-    expect(activity?.activityType).toBe("CREDIT");
+    expect(outcome.ok && outcome.activity.activityType).toBe("CREDIT");
   });
 });

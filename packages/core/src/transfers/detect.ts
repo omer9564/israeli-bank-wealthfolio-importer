@@ -23,6 +23,28 @@ export interface DetectOptions {
   windowDays: number;
 }
 
+/** A bank debit that looked like a declared card payment but was not paired. */
+export interface UnpairedDebit {
+  debit: ActivityImport;
+  /** The `cardPayments` entry's declared target, so the summary can name it. */
+  wealthfolioAccountId: string;
+}
+
+export interface DetectionResult {
+  /**
+   * Debits with more than one equally good card-side credit. Deliberate: a
+   * wrongly-linked pair is invisible and wrong forever.
+   */
+  ambiguous: UnpairedDebit[];
+  /**
+   * Debits whose declared `wealthfolioAccountId` was not among this run's
+   * accounts at all. Almost always a config typo — a materially different
+   * diagnosis from `ambiguous`, and one the user fixes in a different place.
+   */
+  missingCardAccount: UnpairedDebit[];
+  pairs: PairPlan[];
+}
+
 const DAY_MS = 86_400_000;
 
 function findCandidates(
@@ -69,7 +91,11 @@ function pairDebit(
   // account, an unlinked TRANSFER_IN/TRANSFER_OUT falls through and is
   // Ignored instead of netted. So every leg produced below MUST be linked
   // after import, or the pairing this function exists to do is silently
-  // undone.
+  // undone — and a synthesized leg that is written but never linked is
+  // permanent, because the importer keeps no state to undo it with. That
+  // invariant is enforced, not merely documented: `runSync` compares
+  // `totals.linked` against `totals.pairsDetected` and fails the run when
+  // they disagree.
   debit.activityType = "TRANSFER_OUT";
   debit.subtype = undefined;
 
@@ -109,11 +135,12 @@ function pairDebit(
 export function detectCardPayments(
   buckets: AccountBucket[],
   options: DetectOptions
-): { pairs: PairPlan[]; unmatched: ActivityImport[] } {
+): DetectionResult {
   const pairs: PairPlan[] = [];
-  const unmatched: ActivityImport[] = [];
+  const ambiguous: UnpairedDebit[] = [];
+  const missingCardAccount: UnpairedDebit[] = [];
   if (options.cardPayments.length === 0) {
-    return { pairs, unmatched };
+    return { ambiguous, missingCardAccount, pairs };
   }
 
   const byId = new Map(buckets.map((bucket) => [bucket.accountId, bucket]));
@@ -145,18 +172,24 @@ export function detectCardPayments(
       // TRANSFER_OUT with no counterpart anywhere, which reads as "linked"
       // in the UI while actually classifying as spend.
       if (card === undefined) {
-        unmatched.push(debit);
+        missingCardAccount.push({
+          debit,
+          wealthfolioAccountId: rule.wealthfolioAccountId,
+        });
         continue;
       }
 
       const outcome = pairDebit(debit, rule, card, claimed, windowMs);
       if (outcome === "ambiguous") {
-        unmatched.push(debit);
+        ambiguous.push({
+          debit,
+          wealthfolioAccountId: rule.wealthfolioAccountId,
+        });
         continue;
       }
       pairs.push(outcome);
     }
   }
 
-  return { pairs, unmatched };
+  return { ambiguous, missingCardAccount, pairs };
 }
