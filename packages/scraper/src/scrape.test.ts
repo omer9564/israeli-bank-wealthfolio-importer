@@ -23,7 +23,7 @@ describe("buildScraperOptions", () => {
     expect(options.companyId).toBe("hapoalim");
     expect(options.startDate).toEqual(new Date("2026-07-01"));
     expect(options.verbose).toBe(false);
-    expect(options.timeout).toBe(5000);
+    expect(options.defaultTimeout).toBe(5000);
   });
 
   test("does not carry browser-launch settings; those belong to buildLaunchOptions", () => {
@@ -166,5 +166,18 @@ describe("scrapeProvider", () => {
       errorType: "exception",
       errorMessage: "failed to launch browser",
     });
+  });
+});
+
+describe("navigation timeout", () => {
+  // The library declares `timeout` but never reads it; `defaultTimeout` is
+  // what reaches page.setDefaultTimeout. Getting this wrong is invisible —
+  // navigations just quietly use puppeteer's 30s default.
+  test("sets defaultTimeout, which is the option the library actually reads", () => {
+    const options = buildScraperOptions({ companyId: "visaCal" } as never, {
+      startDate: new Date("2026-07-01"),
+    });
+    expect(options.defaultTimeout).toBe(120_000);
+    expect("timeout" in options).toBe(false);
   });
 });

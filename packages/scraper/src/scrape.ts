@@ -35,7 +35,12 @@ export function buildScraperOptions(
     // purchase in month one and misstate every month after.
     combineInstallments: false,
     verbose: false,
-    timeout: options.timeoutMs ?? 120_000,
+    // `defaultTimeout`, NOT `timeout`. The library declares `timeout` in its
+    // public options and documents a 30s default, but never reads it —
+    // `defaultTimeout` is the one it feeds to page.setDefaultTimeout. Passing
+    // `timeout` silently left every navigation on puppeteer's 30s default,
+    // which made slow bank sites fail spuriously.
+    defaultTimeout: options.timeoutMs ?? 120_000,
   };
 }
 
