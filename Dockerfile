@@ -1,4 +1,4 @@
-FROM oven/bun:1.3.10-debian
+FROM oven/bun:1.4.0-debian
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Jerusalem \
