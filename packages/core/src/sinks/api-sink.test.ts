@@ -123,4 +123,59 @@ describe("ApiSink", () => {
     expect(calls).toEqual([]);
     expect(report).toEqual({ linked: 0, supported: true, unlinked: 1 });
   });
+
+  test("recovers ids for rows the server deduplicated, so a rescan can link", async () => {
+    // A trailing-window rescan re-sends rows that already exist. They are
+    // dropped from the import, so their ids only ever arrive as duplicateOfId.
+    // Without this the legs look id-less and every existing pair reports as
+    // unlinked on every run after the first.
+    const sink = new ApiSink({
+      checkImport(rows: ActivityImport[]) {
+        return rows.map((row) => ({
+          ...row,
+          isValid: true,
+          duplicateOfId: `existing-${row.lineNumber}`,
+        }));
+      },
+      import() {
+        throw new Error("must not import when everything is a duplicate");
+      },
+      link() {
+        return undefined;
+      },
+    } as never);
+
+    const report = await sink.write([activity(), activity()]);
+    expect(report.imported).toBe(0);
+    expect(report.duplicates).toBe(2);
+    expect(report.ids.get(0)).toBe("existing-0");
+    expect(report.ids.get(1)).toBe("existing-1");
+  });
+
+  test("attempts every pair even when one link call fails", async () => {
+    // A synthesized leg that is written but never linked is permanent, so an
+    // early abort on pair 1 must not strand the legs of pairs 2 and 3.
+    const attempted: string[] = [];
+    const sink = new ApiSink({
+      link(outId: string) {
+        attempted.push(outId);
+        if (outId === "out-1") {
+          throw new Error("400 Record not found");
+        }
+        return undefined;
+      },
+    } as never);
+
+    const pair = (n: number) => ({
+      in: activity({ id: `in-${n}` }),
+      out: activity({ id: `out-${n}` }),
+      synthesized: true,
+    });
+
+    const report = await sink.link([pair(1), pair(2), pair(3)]);
+
+    expect(attempted).toEqual(["out-1", "out-2", "out-3"]);
+    expect(report.linked).toBe(2);
+    expect(report.unlinked).toBe(1);
+  });
 });

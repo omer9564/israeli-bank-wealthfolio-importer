@@ -36,6 +36,17 @@ export class ApiSink implements Sink {
     const duplicates = checked.filter(
       (row) => row.duplicateOfId !== undefined
     ).length;
+    // The window is a trailing rescan, so most rows already exist. Those are
+    // dropped from the import below and their ids never appear in its response
+    // — `duplicateOfId` is the only place they surface. Without recovering
+    // them here, every pair whose legs already existed looks id-less, and a
+    // fully-linked book reports "0 of N pairs linked" on every run after the
+    // first.
+    for (const row of checked) {
+      if (row.lineNumber !== undefined && row.duplicateOfId !== undefined) {
+        ids.set(row.lineNumber, row.duplicateOfId);
+      }
+    }
     // A scheduled sync has no business overriding duplicate detection, so
     // `forceImport` stays false and flagged rows are simply dropped.
     const importable = checked.filter(
@@ -95,8 +106,17 @@ export class ApiSink implements Sink {
         unlinked += 1;
         continue;
       }
-      await this.client.link(outId, inId);
-      linked += 1;
+      // One failing pair must not abort the loop. A synthesized leg is written
+      // before linking and the importer keeps no state to undo it with, so an
+      // early throw would strand every later pair's leg permanently. Count the
+      // failure instead — `runSync` still fails the run when `linked` falls
+      // short of `pairsDetected`, just after every pair has had its turn.
+      try {
+        await this.client.link(outId, inId);
+        linked += 1;
+      } catch {
+        unlinked += 1;
+      }
     }
     return { linked, supported: true, unlinked };
   }
