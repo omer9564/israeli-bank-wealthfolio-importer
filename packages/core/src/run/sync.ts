@@ -178,7 +178,8 @@ function mapAccount(
 async function processAccount(
   scraped: ScrapedAccount,
   mapping: AccountMapping,
-  state: SyncState
+  state: SyncState,
+  windowStart: Date
 ): Promise<AccountReport> {
   const mapped = mapAccount(scraped, mapping, state);
 
@@ -214,6 +215,7 @@ async function processAccount(
       ? {}
       : { balanceDate: scraped.balanceDate }),
     activities: mapped.activities,
+    windowStart,
   });
 
   if (outcome.ok) {
@@ -259,7 +261,7 @@ async function processProvider(
       });
       continue;
     }
-    accounts.push(await processAccount(scraped, mapping, state));
+    accounts.push(await processAccount(scraped, mapping, state, startDate));
   }
 
   return { accounts, id: provider.id, ok: true };

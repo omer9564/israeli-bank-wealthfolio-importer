@@ -32,6 +32,16 @@ export interface AnchorInput {
   /** The scraped account's own currency. Only activities in this currency net against `scrapedBalance`. */
   currency: string;
   scrapedBalance: number;
+  /**
+   * Start of the scrape window. The anchor is dated just before this rather
+   * than just before the account's own first row, because providers reach
+   * back different distances: a card whose history starts before the bank's
+   * first transaction would otherwise sit in a stretch of ledger containing
+   * card debt and no cash, showing a negative net worth that never happened.
+   * The money was in the account from the window's start regardless of when
+   * its first transaction landed.
+   */
+  windowStart: Date;
 }
 
 /**
@@ -121,7 +131,7 @@ export function buildAnchor(input: AnchorInput): AnchorOutcome {
     first.date
   );
   const anchorDate = new Date(
-    new Date(earliest).getTime() - 86_400_000
+    input.windowStart.getTime() - 86_400_000
   ).toISOString();
   const label = input.balanceDate ?? earliest.slice(0, 10);
 

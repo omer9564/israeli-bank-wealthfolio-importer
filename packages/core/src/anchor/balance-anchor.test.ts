@@ -51,6 +51,7 @@ describe("buildAnchor", () => {
         currency: "ILS",
         scrapedBalance: 1000,
         balanceDate: "2026-08-20",
+        windowStart: new Date("2025-08-01T00:00:00.000Z"),
         activities,
       })
     );
@@ -72,6 +73,7 @@ describe("buildAnchor", () => {
         accountType: "CASH",
         currency: "ILS",
         scrapedBalance: 100,
+        windowStart: new Date("2025-08-01T00:00:00.000Z"),
         activities,
       })
     );
@@ -85,6 +87,7 @@ describe("buildAnchor", () => {
         accountType: "CASH",
         currency: "ILS",
         scrapedBalance: 300,
+        windowStart: new Date("2025-08-01T00:00:00.000Z"),
         activities,
       })
     ).toEqual({ ok: false, reason: "alreadyBalanced" });
@@ -97,6 +100,7 @@ describe("buildAnchor", () => {
         accountType: "CASH",
         currency: "ILS",
         scrapedBalance: 300,
+        windowStart: new Date("2025-08-01T00:00:00.000Z"),
         activities: [],
       })
     ).toEqual({ ok: false, reason: "noActivitiesInCurrency" });
@@ -116,6 +120,7 @@ describe("buildAnchor", () => {
 
     const anchor = anchorOf(
       buildAnchor({
+        windowStart: new Date("2025-08-01T00:00:00.000Z"),
         accountId: "acc-1",
         accountType: "CASH",
         currency: "ILS",
@@ -132,7 +137,10 @@ describe("buildAnchor", () => {
     // The date must come from the ILS rows only. The USD row is the earliest
     // in the batch, so computing it over the unfiltered list would date the
     // anchor a day before 2026-08-05 instead of a day before 2026-08-10.
-    expect(anchor?.date).toBe("2026-08-09T00:00:00.000Z");
+    // Dated from the scrape window, not the account's own first row: a card
+    // reaching further back than the bank would otherwise leave a stretch of
+    // ledger holding card debt and no cash.
+    expect(anchor?.date).toBe("2025-07-31T00:00:00.000Z");
   });
 
   test("reports when no activity matches the account's currency", () => {
@@ -142,6 +150,7 @@ describe("buildAnchor", () => {
 
     expect(
       buildAnchor({
+        windowStart: new Date("2025-08-01T00:00:00.000Z"),
         accountId: "acc-1",
         accountType: "CASH",
         currency: "ILS",
@@ -158,6 +167,7 @@ describe("buildAnchor", () => {
         accountType: "CASH",
         currency: "ILS",
         scrapedBalance: Number.NaN,
+        windowStart: new Date("2025-08-01T00:00:00.000Z"),
         activities,
       })
     ).toEqual({ ok: false, reason: "nonFiniteBalance" });
@@ -174,6 +184,7 @@ describe("buildAnchor on a CREDIT_CARD", () => {
       accountType: (accountType ?? "CREDIT_CARD") as WealthfolioAccountType,
       currency: "ILS",
       scrapedBalance,
+      windowStart: new Date("2025-08-01T00:00:00.000Z"),
       activities: purchases,
     });
   }
