@@ -403,15 +403,12 @@ describe("runSync", () => {
       hasActivities: async () => false,
     });
 
-    // A credit card CAN be anchored: its opening balance is an external
-    // transfer, not a DEPOSIT (which Wealthfolio would ignore there). So the
-    // purchase and the anchor are both written.
+    // A card settles monthly, so the issuer reports only the CURRENT cycle,
+    // not opening-balance-plus-everything-imported. Anchoring on that
+    // difference invents credit. The purchase imports; no anchor is written,
+    // and that is a non-event rather than something to report.
     expect(report.providers[0]?.accounts[0]?.anchorFailure).toBeUndefined();
-    expect(written[0]).toHaveLength(2);
-    const anchor = (
-      written[0] as { comment: string; activityType: string }[]
-    ).find((row) => row.comment.startsWith("Opening balance anchor"));
-    expect(anchor?.activityType).toBe("TRANSFER_IN");
+    expect(written[0]).toHaveLength(1);
   });
 
   test("names a cardPayments account that was not part of this run", async () => {
