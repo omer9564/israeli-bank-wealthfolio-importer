@@ -70,6 +70,8 @@ export function mapTransaction(
       fee: 0,
       comment: buildComment(txn),
       isDraft: false,
+      isValid: false,
+      symbol: "",
     },
   };
 }

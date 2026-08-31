@@ -12,6 +12,8 @@ function activity(over: Partial<ActivityImport> = {}): ActivityImport {
     fee: 0,
     comment: "c",
     isDraft: false,
+    isValid: false,
+    symbol: "",
     ...over,
   };
 }

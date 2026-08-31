@@ -120,6 +120,8 @@ export function buildAnchor(input: AnchorInput): AnchorOutcome {
       fee: 0,
       comment: `Opening balance anchor — ${label}`,
       isDraft: false,
+      isValid: false,
+      symbol: "",
     },
   };
 }

@@ -14,6 +14,8 @@ describe("toCsv", () => {
         fee: 0,
         comment: "שופרסל",
         isDraft: false,
+        isValid: false,
+        symbol: "",
       },
     ]);
     const [header, row] = csv.trim().split("\n");
@@ -32,6 +34,8 @@ describe("toCsv", () => {
         fee: 0,
         comment: 'a,b "c"',
         isDraft: false,
+        isValid: false,
+        symbol: "",
       },
     ]);
     expect(csv.trim().split("\n")[1]).toContain('"a,b ""c"""');
@@ -48,6 +52,8 @@ describe("CsvSink", () => {
     fee: 0,
     comment: "c",
     isDraft: false,
+    isValid: false,
+    symbol: "",
     ...over,
   });
 

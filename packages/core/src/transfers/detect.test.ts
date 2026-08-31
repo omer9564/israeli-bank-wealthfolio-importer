@@ -12,6 +12,8 @@ function activity(over: Partial<ActivityImport>): ActivityImport {
     fee: 0,
     comment: "ישראכרט חיוב חודשי",
     isDraft: false,
+    isValid: false,
+    symbol: "",
     ...over,
   };
 }

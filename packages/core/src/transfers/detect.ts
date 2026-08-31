@@ -116,6 +116,8 @@ function pairDebit(
     fee: 0,
     comment: `${debit.comment} · תשלום לכרטיס`,
     isDraft: false,
+    isValid: false,
+    symbol: "",
   };
   card.activities.push(created);
   claimed.add(created);

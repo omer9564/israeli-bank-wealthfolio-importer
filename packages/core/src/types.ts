@@ -53,7 +53,20 @@ export interface ActivityImport {
   fee: number;
   id?: string;
   isDraft: boolean;
-  isValid?: boolean;
+  /**
+   * Required by the server even for pure cash rows: Wealthfolio's Rust
+   * `ActivityImport` declares it `bool`, not `Option<bool>`. The check pass
+   * overwrites whatever we send, so we send `false` — we have not validated.
+   */
+  isValid: boolean;
   lineNumber?: number;
   subtype?: string;
+  /**
+   * Required by the server (`pub symbol: String`, not `Option`), but an empty
+   * string is the documented way to say "pure cash movement": Wealthfolio's
+   * `classify_import_activity` maps an empty or cash-placeholder symbol to
+   * `CashMovement` — "clear symbol, no asset needed". Omitting the field
+   * entirely fails deserialization with a 422.
+   */
+  symbol: string;
 }

@@ -123,3 +123,15 @@ describe("mapTransaction", () => {
     expect(outcome.ok && outcome.activity.activityType).toBe("CREDIT");
   });
 });
+
+describe("server-required fields", () => {
+  // Wealthfolio's Rust ActivityImport declares `symbol: String` and
+  // `is_valid: bool` — neither is Option, so omitting them fails
+  // deserialization with 422 "missing field `symbol`". An empty symbol is
+  // the documented way to say "pure cash movement".
+  test("every mapped activity carries an empty symbol and isValid", () => {
+    const outcome = mapTransaction(txn(), cash);
+    expect(outcome.ok && outcome.activity.symbol).toBe("");
+    expect(outcome.ok && outcome.activity.isValid).toBe(false);
+  });
+});
