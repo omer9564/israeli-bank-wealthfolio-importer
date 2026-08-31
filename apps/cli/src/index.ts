@@ -126,11 +126,53 @@ async function daemon(): Promise<number> {
   }
 }
 
+/**
+ * `console.log`/`console.error` write to stdout/stderr asynchronously once
+ * either is a pipe (true in Docker and in GitHub Actions), so a bare
+ * `process.exit()` right after printing the summary can truncate it. A
+ * stream's write callbacks fire strictly in order, so writing an empty chunk
+ * and waiting for its callback guarantees every write queued ahead of it —
+ * the summary, any error text — has already been flushed.
+ */
+function flushStream(stream: NodeJS.WriteStream): Promise<void> {
+  return new Promise((resolve) => {
+    stream.write("", () => resolve());
+  });
+}
+
+async function flushOutput(): Promise<void> {
+  await flushStream(process.stdout);
+  await flushStream(process.stderr);
+}
+
 const command = process.argv[2] ?? "sync";
 
-try {
-  process.exitCode = command === "daemon" ? await daemon() : await sync();
-} catch (error) {
-  logError(error);
-  process.exitCode = 1;
+if (command === "daemon") {
+  // The daemon loop is meant to keep the process alive between syncs, so it
+  // gets none of the exit backstop below: `sync()` inside the loop already
+  // owns its own cleanup (see packages/scraper/src/scrape.ts), and this
+  // outer try/catch only guards startup validation (e.g. a bad
+  // IBW_INTERVAL_HOURS) that would otherwise throw past the loop entirely.
+  try {
+    process.exitCode = await daemon();
+  } catch (error) {
+    logError(error);
+    process.exitCode = 1;
+  }
+} else {
+  let exitCode: number;
+  try {
+    exitCode = await sync();
+  } catch (error) {
+    logError(error);
+    exitCode = 1;
+  }
+  await flushOutput();
+  // A single scheduled run must never hang past a completed sync — the
+  // production incident this guards against was a leaked Chromium process
+  // (see packages/scraper/src/scrape.ts) whose open handles kept Bun's event
+  // loop alive forever, so `docker run` never returned. Layer 1 fixes the
+  // known leak; this is the backstop for any other stray handle: exit
+  // explicitly with the computed code instead of trusting the loop to drain.
+  process.exit(exitCode);
 }
