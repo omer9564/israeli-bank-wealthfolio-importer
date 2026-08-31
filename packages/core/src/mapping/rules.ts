@@ -2,6 +2,8 @@ import type { ActivityType, WealthfolioAccountType } from "../types";
 
 export interface MappingRule {
   activityType: ActivityType;
+  /** Marks a TRANSFER_IN/TRANSFER_OUT/CREDIT as leaving the tracked accounts. */
+  isExternal?: boolean;
   /** Case-insensitive substring matched against the transaction description. */
   pattern: string;
   subtype?: string;
@@ -36,7 +38,9 @@ const CASH_CREDIT_SUBTYPES = new Set([
 
 export const DEFAULT_RULES: MappingRule[] = [
   { pattern: "ריבית חובה", activityType: "FEE" },
-  { pattern: "ריבית", activityType: "INTEREST" },
+  { pattern: "ריבית על הלוואה", activityType: "FEE" },
+  { pattern: "הלוואה - תשלום ריבית", activityType: "FEE" },
+  { pattern: "ריבית זכות", activityType: "INTEREST" },
   { pattern: "עמלת", activityType: "FEE" },
   { pattern: "עמלה", activityType: "FEE" },
   { pattern: "דמי ניהול", activityType: "FEE" },
@@ -76,7 +80,7 @@ export function resolveActivityType(
   isInflow: boolean,
   account: WealthfolioAccountType,
   rules: MappingRule[]
-): { activityType: ActivityType; subtype?: string } {
+): { activityType: ActivityType; isExternal?: boolean; subtype?: string } {
   const wanted = isInflow ? "inflow" : "outflow";
   const haystack = description.toLowerCase();
 
@@ -90,9 +94,11 @@ export function resolveActivityType(
     if (!isTypeValidForAccount(rule.activityType, account, rule.subtype)) {
       continue;
     }
-    return rule.subtype === undefined
-      ? { activityType: rule.activityType }
-      : { activityType: rule.activityType, subtype: rule.subtype };
+    return {
+      activityType: rule.activityType,
+      ...(rule.subtype === undefined ? {} : { subtype: rule.subtype }),
+      ...(rule.isExternal === undefined ? {} : { isExternal: rule.isExternal }),
+    };
   }
 
   if (account === "CREDIT_CARD") {

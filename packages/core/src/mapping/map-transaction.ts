@@ -51,7 +51,7 @@ export function mapTransaction(
   }
 
   const isInflow = txn.chargedAmount > 0;
-  const { activityType, subtype } = resolveActivityType(
+  const { activityType, subtype, isExternal } = resolveActivityType(
     txn.description,
     isInflow,
     ctx.accountType,
@@ -64,6 +64,7 @@ export function mapTransaction(
       accountId: ctx.accountId,
       activityType,
       ...(subtype === undefined ? {} : { subtype }),
+      ...(isExternal === undefined ? {} : { isExternal }),
       date: txn.date,
       amount: Math.abs(txn.chargedAmount),
       currency: txn.chargedCurrency ?? ctx.fallbackCurrency,

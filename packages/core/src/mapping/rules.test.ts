@@ -83,3 +83,33 @@ describe("resolveActivityType", () => {
     );
   });
 });
+
+describe("external transfers", () => {
+  // Wealthfolio persists this as metadata.flow.is_external — the same field
+  // the UI's "External transfer" checkbox sets. The server honours it only
+  // for TRANSFER_IN, TRANSFER_OUT and CREDIT.
+  test("a rule can mark a transfer as leaving the tracked accounts", () => {
+    const rules = [
+      {
+        pattern: "העברה מהחשבון",
+        activityType: "TRANSFER_OUT" as const,
+        isExternal: true,
+      },
+    ];
+    expect(resolveActivityType("העברה מהחשבון", false, "CASH", rules)).toEqual({
+      activityType: "TRANSFER_OUT",
+      isExternal: true,
+    });
+  });
+
+  test("loan interest is a charge, not income, in either direction", () => {
+    expect(
+      resolveActivityType("הלוואה - תשלום ריבית", false, "CASH", DEFAULT_RULES)
+        .activityType
+    ).toBe("FEE");
+    expect(
+      resolveActivityType("הלוואה - תשלום ריבית", true, "CASH", DEFAULT_RULES)
+        .activityType
+    ).not.toBe("INTEREST");
+  });
+});

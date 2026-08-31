@@ -73,6 +73,7 @@ const mappingRule = z.object({
     "TRANSFER_OUT",
   ]),
   subtype: z.string().optional(),
+  isExternal: z.boolean().optional(),
 });
 
 const provider = z

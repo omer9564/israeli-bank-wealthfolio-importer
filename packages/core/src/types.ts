@@ -54,6 +54,15 @@ export interface ActivityImport {
   id?: string;
   isDraft: boolean;
   /**
+   * Marks a transfer (or CREDIT) as crossing the tracked-account boundary.
+   * The server persists it as `metadata.flow.is_external`, the same field the
+   * UI's "External transfer" checkbox sets, so an imported transfer to an
+   * account Wealthfolio does not track gets the same net-contribution and
+   * flow semantics as a hand-entered one. Only honoured for TRANSFER_IN,
+   * TRANSFER_OUT and CREDIT; ignored elsewhere.
+   */
+  isExternal?: boolean;
+  /**
    * Required by the server even for pure cash rows: Wealthfolio's Rust
    * `ActivityImport` declares it `bool`, not `Option<bool>`. The check pass
    * overwrites whatever we send, so we send `false` — we have not validated.
