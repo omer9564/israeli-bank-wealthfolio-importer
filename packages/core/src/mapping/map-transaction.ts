@@ -4,6 +4,7 @@ import type {
   WealthfolioAccountType,
 } from "../types";
 import { buildComment } from "./comment";
+import { normalizeCurrency } from "./currency";
 import type { MappingRule } from "./rules";
 import { resolveActivityType } from "./rules";
 
@@ -67,7 +68,7 @@ export function mapTransaction(
       ...(isExternal === undefined ? {} : { isExternal }),
       date: txn.date,
       amount: Math.abs(txn.chargedAmount),
-      currency: txn.chargedCurrency ?? ctx.fallbackCurrency,
+      currency: normalizeCurrency(txn.chargedCurrency ?? ctx.fallbackCurrency),
       fee: 0,
       comment: buildComment(txn),
       isDraft: false,

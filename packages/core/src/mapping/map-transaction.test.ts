@@ -135,3 +135,28 @@ describe("server-required fields", () => {
     expect(outcome.ok && outcome.activity.isValid).toBe(false);
   });
 });
+
+describe("currency normalisation", () => {
+  test("maps Cal's ₪ to ILS", () => {
+    const outcome = mapTransaction(txn({ chargedCurrency: "₪" }), cash);
+    expect(outcome.ok && outcome.activity.currency).toBe("ILS");
+  });
+
+  test("normalises a lowercase code", () => {
+    const outcome = mapTransaction(txn({ chargedCurrency: "usd" }), cash);
+    expect(outcome.ok && outcome.activity.currency).toBe("USD");
+  });
+
+  test("normalises the account fallback too", () => {
+    const outcome = mapTransaction(txn({ chargedCurrency: undefined }), {
+      ...cash,
+      fallbackCurrency: "₪",
+    });
+    expect(outcome.ok && outcome.activity.currency).toBe("ILS");
+  });
+
+  test("passes an unrecognised value through rather than guessing", () => {
+    const outcome = mapTransaction(txn({ chargedCurrency: "SHEKEL" }), cash);
+    expect(outcome.ok && outcome.activity.currency).toBe("SHEKEL");
+  });
+});
