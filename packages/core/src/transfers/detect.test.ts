@@ -151,4 +151,52 @@ describe("detectCardPayments", () => {
     ]);
     expect(debit.activityType).toBe("WITHDRAWAL");
   });
+
+  test("synthesizes a bucket for a declared account no scraper covers", () => {
+    const debit = activity({ comment: "108 הלוואה - תשלום קרן · אסמכתא 108" });
+    const rules = [
+      {
+        pattern: "הלוואה - תשלום קרן",
+        unscraped: true,
+        wealthfolioAccountId: "loan",
+      },
+    ];
+    // Only the bank is scraped: a loan account has no provider behind it.
+    const bucketList = [
+      { accountId: "bank", accountType: "CASH" as const, activities: [debit] },
+    ];
+
+    const result = detectCardPayments(bucketList, {
+      cardPayments: rules,
+      windowDays: 5,
+    });
+
+    expect(result.missingCardAccount).toHaveLength(0);
+    expect(result.ambiguous).toHaveLength(0);
+    expect(result.pairs).toHaveLength(1);
+    expect(result.pairs[0]?.synthesized).toBe(true);
+    expect(debit.activityType).toBe("TRANSFER_OUT");
+
+    // The synthesized leg must reach the sink, which flattens this same array.
+    const created = bucketList.find((bucket) => bucket.accountId === "loan");
+    expect(created?.activities).toHaveLength(1);
+    expect(created?.activities[0]?.activityType).toBe("TRANSFER_IN");
+    expect(created?.activities[0]?.amount).toBe(debit.amount);
+  });
+
+  test("still reports a missing account when it was not declared unscraped", () => {
+    const debit = activity({});
+    const rules = [{ pattern: "ישראכרט", wealthfolioAccountId: "typo-card" }];
+
+    const result = detectCardPayments(buckets([debit]), {
+      cardPayments: rules,
+      windowDays: 5,
+    });
+
+    expect(result.pairs).toHaveLength(0);
+    expect(result.missingCardAccount).toEqual([
+      { debit, wealthfolioAccountId: "typo-card" },
+    ]);
+    expect(debit.activityType).toBe("WITHDRAWAL");
+  });
 });

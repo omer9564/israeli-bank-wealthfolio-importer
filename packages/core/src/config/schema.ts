@@ -124,6 +124,11 @@ export const ConfigSchema = z
       .array(
         z.object({
           pattern: z.string().min(1),
+          // Opts the target out of the "declared under a provider" check below:
+          // a loan, savings plan or brokerage exists in Wealthfolio but no
+          // scraper imports into it, so the counterpart leg is always
+          // synthesized. Wealthfolio rejects the write if the id is wrong.
+          unscraped: z.boolean().optional(),
           wealthfolioAccountId: z.string().min(1),
         })
       )
@@ -143,6 +148,9 @@ export const ConfigSchema = z
       )
     );
     for (const [index, rule] of value.cardPayments.entries()) {
+      if (rule.unscraped === true) {
+        continue;
+      }
       if (!declared.has(rule.wealthfolioAccountId)) {
         ctx.addIssue({
           code: "custom",

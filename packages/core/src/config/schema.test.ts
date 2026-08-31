@@ -147,4 +147,30 @@ describe("parseConfig", () => {
     };
     expect(() => parseConfig(bad)).toThrow(USERNAME_FIELD);
   });
+
+  test("accepts a cardPayments target declared unscraped", () => {
+    const config = parseConfig({
+      ...base,
+      cardPayments: [
+        {
+          pattern: "הלוואה - תשלום קרן",
+          unscraped: true,
+          wealthfolioAccountId: "loan-account",
+        },
+      ],
+    });
+
+    expect(config.cardPayments[0]?.unscraped).toBe(true);
+  });
+
+  test("still rejects an undeclared target that is not marked unscraped", () => {
+    expect(() =>
+      parseConfig({
+        ...base,
+        cardPayments: [
+          { pattern: "ישראכרט", wealthfolioAccountId: "typo-account" },
+        ],
+      })
+    ).toThrow();
+  });
 });

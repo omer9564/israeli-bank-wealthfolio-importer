@@ -8,6 +8,13 @@ export interface AccountBucket {
 
 export interface CardPaymentRule {
   pattern: string;
+  /**
+   * The target is a Wealthfolio account no provider scrapes — a loan, a
+   * savings plan, a brokerage. There is never a card-side credit to match, so
+   * the counterpart leg is always synthesized. Without this, such a target is
+   * indistinguishable from a mistyped account id.
+   */
+  unscraped?: boolean;
   wealthfolioAccountId: string;
 }
 
@@ -125,6 +132,36 @@ function pairDebit(
 }
 
 /**
+ * The bucket a rule's declared target should pair against, or `undefined` when
+ * the target is absent and was not declared `unscraped` — a typo.
+ *
+ * A declared-but-unscraped target has no bucket, because nothing imports into
+ * it. It gets an empty one: `pairDebit` then finds no candidate credit and
+ * synthesizes the inbound leg, and appending the bucket to `buckets` is what
+ * carries that leg through to the sink, which flattens this same array. The
+ * bucket's type only gates debit scanning in the caller — a counterpart-only
+ * bucket is never scanned, so any non-CASH value is inert here.
+ */
+function resolveTargetBucket(
+  rule: CardPaymentRule,
+  byId: Map<string, AccountBucket>,
+  buckets: AccountBucket[]
+): AccountBucket | undefined {
+  const existing = byId.get(rule.wealthfolioAccountId);
+  if (existing !== undefined || rule.unscraped !== true) {
+    return existing;
+  }
+  const created: AccountBucket = {
+    accountId: rule.wealthfolioAccountId,
+    accountType: "CREDIT_CARD",
+    activities: [],
+  };
+  byId.set(rule.wealthfolioAccountId, created);
+  buckets.push(created);
+  return created;
+}
+
+/**
  * Wealthfolio nets a transfer only when both legs share a `source_group_id`,
  * which `POST /activities/link` sets. So a card payment must become a linked
  * TRANSFER_OUT / TRANSFER_IN pair, or it is counted as spending twice.
@@ -149,7 +186,9 @@ export function detectCardPayments(
   const claimed = new Set<ActivityImport>();
   const windowMs = options.windowDays * DAY_MS;
 
-  for (const bucket of buckets) {
+  // Snapshot: an `unscraped` target appends a bucket to `buckets` below, and
+  // that bucket must not be re-entered as a source of debits.
+  for (const bucket of [...buckets]) {
     if (bucket.accountType !== "CASH") {
       continue;
     }
@@ -166,7 +205,7 @@ export function detectCardPayments(
         continue;
       }
 
-      const card = byId.get(rule.wealthfolioAccountId);
+      const card = resolveTargetBucket(rule, byId, buckets);
       // A declared card account can legitimately be absent from a given run
       // (a config typo, or a partial run where that card provider wasn't
       // scraped). That's a reportable pairing failure, not a bug to paper
