@@ -182,25 +182,17 @@ describe("buildAnchor on a CREDIT_CARD", () => {
   // withdrawal: DEPOSIT is ignored outright by Wealthfolio on a credit card,
   // and WITHDRAWAL would read as fresh spending. Both directions are external
   // transfers, which is what the UI's "External transfer" checkbox writes.
-  test("emits an external TRANSFER_OUT when the card owes more than the scraped purchases", () => {
-    expect(anchorOf(cardAnchor(-500))).toMatchObject({
-      activityType: "TRANSFER_OUT",
-      amount: 200,
-      isExternal: true,
-    });
-  });
-
-  test("emits an external TRANSFER_IN for a paid-off card", () => {
-    expect(anchorOf(cardAnchor(0))).toMatchObject({
-      activityType: "TRANSFER_IN",
-      isExternal: true,
-    });
-  });
-
-  test("emits an external TRANSFER_IN for a card in credit", () => {
-    expect(anchorOf(cardAnchor(250))).toMatchObject({
-      activityType: "TRANSFER_IN",
-      isExternal: true,
+  // A card is never anchored. The formula assumes the scraped balance equals
+  // the opening balance plus everything imported, which is false for a card
+  // that settles monthly: the issuer reports only the current cycle. Verified
+  // against Cal — card 5108 reports -2,114.51 while a year of its charges sums
+  // to -74,757, so anchoring on the difference invents ~72,600 of credit.
+  test.each([
+    -500, 0, 250,
+  ])("never anchors a credit card, whatever balance it reports (%p)", (balance) => {
+    expect(cardAnchor(balance)).toEqual({
+      ok: false,
+      reason: "cardNeedsNoAnchor",
     });
   });
 
@@ -210,45 +202,5 @@ describe("buildAnchor on a CREDIT_CARD", () => {
       activityType: "DEPOSIT",
       amount: 300,
     });
-  });
-});
-
-describe("credit-card anchors", () => {
-  const cardActivity = activity({ accountId: "card", amount: 300 });
-
-  test("uses an external TRANSFER_IN, not a DEPOSIT Wealthfolio would ignore", () => {
-    const out = buildAnchor({
-      accountId: "card",
-      accountType: "CREDIT_CARD",
-      currency: "ILS",
-      scrapedBalance: 0,
-      activities: [cardActivity],
-    });
-    expect(out.ok && out.anchor.activityType).toBe("TRANSFER_IN");
-    expect(out.ok && out.anchor.isExternal).toBe(true);
-  });
-
-  test("uses an external TRANSFER_OUT when the card owes more than imported", () => {
-    const out = buildAnchor({
-      accountId: "card",
-      accountType: "CREDIT_CARD",
-      currency: "ILS",
-      scrapedBalance: -900,
-      activities: [cardActivity],
-    });
-    expect(out.ok && out.anchor.activityType).toBe("TRANSFER_OUT");
-    expect(out.ok && out.anchor.isExternal).toBe(true);
-  });
-
-  test("a cash anchor stays a DEPOSIT and is not marked external", () => {
-    const out = buildAnchor({
-      accountId: "acc-1",
-      accountType: "CASH",
-      currency: "ILS",
-      scrapedBalance: 1000,
-      activities: [activity({ activityType: "DEPOSIT", amount: 500 })],
-    });
-    expect(out.ok && out.anchor.activityType).toBe("DEPOSIT");
-    expect(out.ok && out.anchor.isExternal).toBeUndefined();
   });
 });

@@ -385,7 +385,7 @@ describe("runSync", () => {
     expect(report.transferLinkingSupported).toBe(false);
   });
 
-  test("anchors a credit card with an external transfer, not a DEPOSIT", async () => {
+  test("imports a credit card's purchases without inventing an anchor", async () => {
     const { sink, written } = recordingSink();
     const report = await runSync(cardConfig(), {
       sink,

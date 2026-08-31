@@ -35,13 +35,15 @@ export interface AnchorInput {
 }
 
 /**
- * Why an account produced no anchor. `alreadyBalanced` and
- * `noActivitiesInCurrency` are ordinary non-events; `nonFiniteBalance` and
- * `invalidForAccountType` mean the account's opening balance is genuinely
+ * Why an account produced no anchor. `alreadyBalanced`,
+ * `noActivitiesInCurrency` and `cardNeedsNoAnchor` are ordinary non-events
+ * the run should stay quiet about; `nonFiniteBalance` and
+ * `invalidForAccountType` mean a cash account's opening balance is genuinely
  * missing and the run must say so.
  */
 export type AnchorSkipReason =
   | "alreadyBalanced"
+  | "cardNeedsNoAnchor"
   | "invalidForAccountType"
   | "nonFiniteBalance"
   | "noActivitiesInCurrency";
@@ -59,16 +61,6 @@ export type AnchorOutcome =
  * Callers must only invoke this on a first sync (see `WealthfolioClient.hasActivities`).
  * Re-anchoring on later runs would fight the transactions and compound drift.
  */
-function anchorTypeFor(
-  accountType: WealthfolioAccountType,
-  inflow: boolean
-): ActivityType {
-  if (accountType === "CREDIT_CARD") {
-    return inflow ? "TRANSFER_IN" : "TRANSFER_OUT";
-  }
-  return inflow ? "DEPOSIT" : "WITHDRAWAL";
-}
-
 export function buildAnchor(input: AnchorInput): AnchorOutcome {
   // The scraper's reported balance is a plain number with no runtime
   // validation, so an upstream parse miss can hand us NaN/Infinity here
@@ -78,6 +70,20 @@ export function buildAnchor(input: AnchorInput): AnchorOutcome {
   // Wealthfolio.
   if (!Number.isFinite(input.scrapedBalance)) {
     return { ok: false, reason: "nonFiniteBalance" };
+  }
+
+  // A credit card is never anchored, and this is not a limitation to work
+  // around. The whole formula below assumes the scraped balance equals the
+  // opening balance plus everything we imported — true for a bank account,
+  // false for a card that settles in full every month, where the issuer
+  // reports only the CURRENT CYCLE's charge. Verified against Cal: card 5108
+  // reports balance -2,114.51 while a year of its charges sums to -74,757.
+  // Anchoring on that difference credited the card ~72,600 of pure fiction.
+  // A monthly-settling card whose purchases AND payments are both imported
+  // converges on the correct balance unaided — Diners landed on -802.17,
+  // matching the issuer exactly, with no anchor at all.
+  if (input.accountType === "CREDIT_CARD") {
+    return { ok: false, reason: "cardNeedsNoAnchor" };
   }
 
   // The scraped balance is denominated in the account's own currency, so
@@ -105,7 +111,7 @@ export function buildAnchor(input: AnchorInput): AnchorOutcome {
   // from, or going to, somewhere Wealthfolio does not track, which is exactly
   // what an opening balance represents. That is the same thing the UI's
   // "External transfer" checkbox writes.
-  const activityType = anchorTypeFor(input.accountType, difference > 0);
+  const activityType: ActivityType = difference > 0 ? "DEPOSIT" : "WITHDRAWAL";
   if (!isTypeValidForAccount(activityType, input.accountType)) {
     return { ok: false, reason: "invalidForAccountType" };
   }
@@ -131,9 +137,6 @@ export function buildAnchor(input: AnchorInput): AnchorOutcome {
       comment: `Opening balance anchor — ${label}`,
       isDraft: false,
       isValid: false,
-      // Unlinked, so without this flag Wealthfolio would treat the pair as
-      // an untracked internal move rather than a boundary crossing.
-      ...(input.accountType === "CREDIT_CARD" ? { isExternal: true } : {}),
       symbol: "",
     },
   };
