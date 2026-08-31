@@ -16,7 +16,7 @@ inputs:
 
 runs:
   using: docker
-  image: docker://ghcr.io/omer9564/israeli-bank-wealthfolio-importer:v1
+  image: docker://ghcr.io/omer9564/israeli-bank-wealthfolio-importer:v0
   args: ["sync"]
   env:
     IBW_DAYS_BACK: ${{ inputs.days-back }}

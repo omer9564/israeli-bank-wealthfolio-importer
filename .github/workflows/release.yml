@@ -8,8 +8,8 @@ jobs:
   ci:
     uses: ./.github/workflows/node-ci.yml
 
-  # `@v1` consumers (both the composite action and the reusable workflow)
-  # pin `ghcr.io/.../israeli-bank-wealthfolio-importer:v1`, so that tag must
+  # `@vN` consumers (both the composite action and the reusable workflow)
+  # pin `ghcr.io/.../israeli-bank-wealthfolio-importer:vN`, so that tag must
   # actually be published alongside the exact version and `latest` — an
   # expression can't strip the patch/minor off `github.ref_name` inline, so
   # it's computed here and passed to the publish job as a job output.
@@ -45,7 +45,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      # `@v1` consumers track this tag, so it must move only after the image
+      # `@vN` consumers track this tag, so it must move only after the image
       # it points at is actually published.
       - name: Move the major tag
         run: |

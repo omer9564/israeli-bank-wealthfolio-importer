@@ -11,7 +11,7 @@ on:
 
 jobs:
   sync:
-    uses: omer9564/israeli-bank-wealthfolio-importer/.github/workflows/import.yml@v1
+    uses: omer9564/israeli-bank-wealthfolio-importer/.github/workflows/import.yml@v0
     with:
       days-back: "30"
     secrets:

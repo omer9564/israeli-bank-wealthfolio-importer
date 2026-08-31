@@ -67,7 +67,7 @@ For running the importer yourself instead of on GitHub's runners:
    # compose.yml
    services:
      ibw:
-       image: ghcr.io/omer9564/israeli-bank-wealthfolio-importer:v1
+       image: ghcr.io/omer9564/israeli-bank-wealthfolio-importer:v0
        command: ["daemon"]
        restart: unless-stopped
        environment:
