@@ -136,21 +136,23 @@ export class WealthfolioClient {
   }
 
   async hasActivities(accountId: string): Promise<boolean> {
-    // Response shape (`{ data, total }`) is inferred from Wealthfolio's Rust
-    // route/request-body definitions, not confirmed against a live server —
-    // hence the fallback to `data?.length` if `total` is ever absent.
-    const page = await this.request<{ data?: unknown[]; total?: number }>(
-      "/activities/search",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          accountIdFilter: [accountId],
-          page: 1,
-          pageSize: 1,
-        }),
-      }
-    );
-    return (page.total ?? page.data?.length ?? 0) > 0;
+    // Verified against a live server (Wealthfolio 2026-08): the response is
+    // `{ data, meta: { totalRowCount } }` — there is no top-level `total` —
+    // and `page` is ZERO-indexed. Sending `page: 1` asks for the SECOND page,
+    // so an account holding exactly one activity reported "no activities" and
+    // the next run wrote a second opening-balance anchor over the first.
+    const page = await this.request<{
+      data?: unknown[];
+      meta?: { totalRowCount?: number };
+    }>("/activities/search", {
+      method: "POST",
+      body: JSON.stringify({
+        accountIdFilter: [accountId],
+        page: 0,
+        pageSize: 1,
+      }),
+    });
+    return (page.meta?.totalRowCount ?? page.data?.length ?? 0) > 0;
   }
 
   /**
