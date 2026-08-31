@@ -385,7 +385,7 @@ describe("runSync", () => {
     expect(report.transferLinkingSupported).toBe(false);
   });
 
-  test("reports an un-anchorable credit card instead of skipping it silently", async () => {
+  test("anchors a credit card with an external transfer, not a DEPOSIT", async () => {
     const { sink, written } = recordingSink();
     const report = await runSync(cardConfig(), {
       sink,
@@ -403,11 +403,15 @@ describe("runSync", () => {
       hasActivities: async () => false,
     });
 
-    expect(report.providers[0]?.accounts[0]?.anchorFailure).toBe(
-      "invalidForAccountType"
-    );
-    // The purchase is still imported; only the anchor is withheld.
-    expect(written[0]).toHaveLength(1);
+    // A credit card CAN be anchored: its opening balance is an external
+    // transfer, not a DEPOSIT (which Wealthfolio would ignore there). So the
+    // purchase and the anchor are both written.
+    expect(report.providers[0]?.accounts[0]?.anchorFailure).toBeUndefined();
+    expect(written[0]).toHaveLength(2);
+    const anchor = (
+      written[0] as { comment: string; activityType: string }[]
+    ).find((row) => row.comment.startsWith("Opening balance anchor"));
+    expect(anchor?.activityType).toBe("TRANSFER_IN");
   });
 
   test("names a cardPayments account that was not part of this run", async () => {

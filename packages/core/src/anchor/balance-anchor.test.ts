@@ -178,27 +178,29 @@ describe("buildAnchor on a CREDIT_CARD", () => {
     });
   }
 
-  test("emits a WITHDRAWAL when the card owes more than the scraped purchases", () => {
+  // A card's opening balance is a boundary crossing, not a deposit or a
+  // withdrawal: DEPOSIT is ignored outright by Wealthfolio on a credit card,
+  // and WITHDRAWAL would read as fresh spending. Both directions are external
+  // transfers, which is what the UI's "External transfer" checkbox writes.
+  test("emits an external TRANSFER_OUT when the card owes more than the scraped purchases", () => {
     expect(anchorOf(cardAnchor(-500))).toMatchObject({
-      activityType: "WITHDRAWAL",
+      activityType: "TRANSFER_OUT",
       amount: 200,
+      isExternal: true,
     });
   });
 
-  test("refuses to anchor a paid-off card rather than emitting DEPOSIT", () => {
-    // Wealthfolio's classifier IGNORES a DEPOSIT on a credit card, so this row
-    // would import cleanly and then be invisible in every spending report
-    // while still moving the balance. Balance 0 is the common case.
-    expect(cardAnchor(0)).toEqual({
-      ok: false,
-      reason: "invalidForAccountType",
+  test("emits an external TRANSFER_IN for a paid-off card", () => {
+    expect(anchorOf(cardAnchor(0))).toMatchObject({
+      activityType: "TRANSFER_IN",
+      isExternal: true,
     });
   });
 
-  test("refuses to anchor a card in credit rather than emitting DEPOSIT", () => {
-    expect(cardAnchor(250)).toEqual({
-      ok: false,
-      reason: "invalidForAccountType",
+  test("emits an external TRANSFER_IN for a card in credit", () => {
+    expect(anchorOf(cardAnchor(250))).toMatchObject({
+      activityType: "TRANSFER_IN",
+      isExternal: true,
     });
   });
 
@@ -208,5 +210,45 @@ describe("buildAnchor on a CREDIT_CARD", () => {
       activityType: "DEPOSIT",
       amount: 300,
     });
+  });
+});
+
+describe("credit-card anchors", () => {
+  const cardActivity = activity({ accountId: "card", amount: 300 });
+
+  test("uses an external TRANSFER_IN, not a DEPOSIT Wealthfolio would ignore", () => {
+    const out = buildAnchor({
+      accountId: "card",
+      accountType: "CREDIT_CARD",
+      currency: "ILS",
+      scrapedBalance: 0,
+      activities: [cardActivity],
+    });
+    expect(out.ok && out.anchor.activityType).toBe("TRANSFER_IN");
+    expect(out.ok && out.anchor.isExternal).toBe(true);
+  });
+
+  test("uses an external TRANSFER_OUT when the card owes more than imported", () => {
+    const out = buildAnchor({
+      accountId: "card",
+      accountType: "CREDIT_CARD",
+      currency: "ILS",
+      scrapedBalance: -900,
+      activities: [cardActivity],
+    });
+    expect(out.ok && out.anchor.activityType).toBe("TRANSFER_OUT");
+    expect(out.ok && out.anchor.isExternal).toBe(true);
+  });
+
+  test("a cash anchor stays a DEPOSIT and is not marked external", () => {
+    const out = buildAnchor({
+      accountId: "acc-1",
+      accountType: "CASH",
+      currency: "ILS",
+      scrapedBalance: 1000,
+      activities: [activity({ activityType: "DEPOSIT", amount: 500 })],
+    });
+    expect(out.ok && out.anchor.activityType).toBe("DEPOSIT");
+    expect(out.ok && out.anchor.isExternal).toBeUndefined();
   });
 });

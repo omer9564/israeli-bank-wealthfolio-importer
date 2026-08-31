@@ -59,6 +59,16 @@ export type AnchorOutcome =
  * Callers must only invoke this on a first sync (see `WealthfolioClient.hasActivities`).
  * Re-anchoring on later runs would fight the transactions and compound drift.
  */
+function anchorTypeFor(
+  accountType: WealthfolioAccountType,
+  inflow: boolean
+): ActivityType {
+  if (accountType === "CREDIT_CARD") {
+    return inflow ? "TRANSFER_IN" : "TRANSFER_OUT";
+  }
+  return inflow ? "DEPOSIT" : "WITHDRAWAL";
+}
+
 export function buildAnchor(input: AnchorInput): AnchorOutcome {
   // The scraper's reported balance is a plain number with no runtime
   // validation, so an upstream parse miss can hand us NaN/Infinity here
@@ -87,15 +97,15 @@ export function buildAnchor(input: AnchorInput): AnchorOutcome {
     return { ok: false, reason: "alreadyBalanced" };
   }
 
-  const activityType: ActivityType = difference > 0 ? "DEPOSIT" : "WITHDRAWAL";
-  // An inflow anchor on a CREDIT_CARD would be a DEPOSIT, which Wealthfolio's
-  // spending classifier IGNORES on that account type — the row would import
-  // cleanly and then be invisible, while carrying zero weight in the very
-  // netEffect above that produced it. That happens for any card whose scraped
-  // balance is at or above its netted activity, i.e. every paid-off card. The
-  // remaining card inflow types (CREDIT, TRANSFER_IN) both mean something
-  // specific and wrong here, so there is no correct row to emit: refuse, and
-  // let the caller report the account as un-anchored.
+  // The anchor's type has to suit the account. On CASH the opening balance is
+  // a DEPOSIT or WITHDRAWAL. On a CREDIT_CARD those are meaningless —
+  // Wealthfolio's classifier IGNORES a DEPOSIT there, so the row would import
+  // cleanly, stay invisible, and carry zero weight in the very netEffect that
+  // produced it. The card equivalent is an EXTERNAL transfer: money arriving
+  // from, or going to, somewhere Wealthfolio does not track, which is exactly
+  // what an opening balance represents. That is the same thing the UI's
+  // "External transfer" checkbox writes.
+  const activityType = anchorTypeFor(input.accountType, difference > 0);
   if (!isTypeValidForAccount(activityType, input.accountType)) {
     return { ok: false, reason: "invalidForAccountType" };
   }
@@ -121,6 +131,9 @@ export function buildAnchor(input: AnchorInput): AnchorOutcome {
       comment: `Opening balance anchor — ${label}`,
       isDraft: false,
       isValid: false,
+      // Unlinked, so without this flag Wealthfolio would treat the pair as
+      // an untracked internal move rather than a boundary crossing.
+      ...(input.accountType === "CREDIT_CARD" ? { isExternal: true } : {}),
       symbol: "",
     },
   };
