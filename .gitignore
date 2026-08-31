@@ -7,3 +7,10 @@ out
 
 # Agent execution plans: working scaffolding, not documentation.
 docs/superpowers/plans/
+
+# Your real configuration holds bank credentials and Wealthfolio's password.
+# The repo only ships config.example.jsonc as a template — never commit a
+# filled-in one. Kept broad on purpose: a leaked config is unrecoverable.
+config.json
+config.*.json
+secrets.json
