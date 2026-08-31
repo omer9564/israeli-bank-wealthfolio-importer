@@ -68,6 +68,8 @@ export interface RunReport {
   providers: ProviderReport[];
   startedAt: string;
   totals: {
+    /** Distinct server-side reasons rows were rejected, for diagnosis. */
+    rejectionReasons: string[];
     duplicates: number;
     imported: number;
     linked: number;
@@ -383,6 +385,7 @@ export async function runSync(
         (account) => account.pendingSkipped
       ),
       skipped: report.skipped,
+      rejectionReasons: report.rejectionReasons,
       unlinkedPairs: linkReport.unlinked,
       zeroAmountSkipped: sumAccounts(
         providers,

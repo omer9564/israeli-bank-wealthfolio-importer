@@ -18,7 +18,13 @@ export class ApiSink implements Sink {
   async write(activities: ActivityImport[]): Promise<WriteReport> {
     const ids = new Map<number, string>();
     if (activities.length === 0) {
-      return { imported: 0, duplicates: 0, skipped: 0, ids };
+      return {
+        imported: 0,
+        duplicates: 0,
+        skipped: 0,
+        ids,
+        rejectionReasons: [],
+      };
     }
 
     const numbered = activities.map((activity, index) => ({
@@ -36,9 +42,22 @@ export class ApiSink implements Sink {
       (row) => row.duplicateOfId === undefined && row.isValid !== false
     );
     const skipped = checked.length - duplicates - importable.length;
+    const rejectionReasons = [
+      ...new Set(
+        checked
+          .filter(
+            (row) => row.duplicateOfId === undefined && row.isValid === false
+          )
+          .flatMap((row) =>
+            Object.entries(row.errors ?? {}).flatMap(([field, messages]) =>
+              messages.map((message) => `${field}: ${message}`)
+            )
+          )
+      ),
+    ].slice(0, 8);
 
     if (importable.length === 0) {
-      return { imported: 0, duplicates, skipped, ids };
+      return { imported: 0, duplicates, skipped, ids, rejectionReasons };
     }
 
     const result = await this.client.import(importable);
@@ -53,6 +72,7 @@ export class ApiSink implements Sink {
       duplicates,
       skipped,
       ids,
+      rejectionReasons,
     };
   }
 

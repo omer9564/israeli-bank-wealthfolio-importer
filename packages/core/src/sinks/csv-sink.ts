@@ -59,6 +59,7 @@ export class CsvSink implements Sink {
       duplicates: 0,
       skipped: 0,
       ids: new Map(),
+      rejectionReasons: [],
     };
   }
 

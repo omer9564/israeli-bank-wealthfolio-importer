@@ -34,6 +34,7 @@ function report(over: Partial<RunReport> = {}): RunReport {
       pairsDetected: 1,
       pendingSkipped: 0,
       skipped: 0,
+      rejectionReasons: [],
       unlinkedPairs: 0,
       zeroAmountSkipped: 0,
     },

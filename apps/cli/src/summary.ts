@@ -82,8 +82,13 @@ function renderSkipWarnings(report: RunReport): string[] {
     lines.push(
       "",
       `❌ Wealthfolio's check pass rejected ${totals.skipped} row(s), which were ` +
-        "dropped rather than imported. A stale `wealthfolioAccountId` or an " +
-        "unparsable date is the usual cause."
+        "dropped rather than imported." +
+        (totals.rejectionReasons.length > 0
+          ? ` It gave these reasons:\n${totals.rejectionReasons
+              .map((reason) => `   • ${reason}`)
+              .join("\n")}`
+          : " It returned no per-row reason, which usually means a stale " +
+            "`wealthfolioAccountId` or an unparsable date.")
     );
   }
   if (totals.nonFiniteSkipped > 0) {

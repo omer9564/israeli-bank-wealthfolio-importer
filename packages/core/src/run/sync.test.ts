@@ -47,6 +47,7 @@ function recordingSink(over: Partial<Sink> = {}) {
         imported: activities.length,
         duplicates: 0,
         skipped: 0,
+        rejectionReasons: [],
         ids: new Map(activities.map((_, index) => [index, `id-${index}`])),
       });
     },
@@ -285,6 +286,7 @@ describe("runSync", () => {
           imported: 0,
           duplicates: 0,
           skipped: activities.length,
+          rejectionReasons: [],
           ids: new Map(),
         });
       },

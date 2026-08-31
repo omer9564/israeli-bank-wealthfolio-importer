@@ -50,6 +50,8 @@ export interface ActivityImport {
   currency: string;
   date: string;
   duplicateOfId?: string;
+  /** Per-field validation messages returned by the server's check pass. */
+  errors?: Record<string, string[]>;
   fee: number;
   id?: string;
   isDraft: boolean;

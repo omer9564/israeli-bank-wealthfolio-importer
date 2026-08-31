@@ -6,6 +6,13 @@ export interface WriteReport {
   /** lineNumber → Wealthfolio activity id, for linking after import. */
   ids: Map<number, string>;
   imported: number;
+  /**
+   * Distinct reasons the server gave for rejecting rows in its check pass,
+   * as "field: message". Without these a rejection is untraceable: the count
+   * alone cannot tell you whether it was a stale account, a bad date, or
+   * something about one provider's data.
+   */
+  rejectionReasons: string[];
   skipped: number;
 }
 
