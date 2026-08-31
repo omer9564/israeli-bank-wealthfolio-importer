@@ -129,7 +129,12 @@ function renderAccountWarnings(report: RunReport): string[] {
   const unmapped = report.providers.flatMap((provider) =>
     provider.accounts
       .filter((account) => !account.mapped)
-      .map((account) => account.accountNumber)
+      // The row count is the only signal distinguishing a live card from one
+      // the issuer merely still lists, which matters when a single login
+      // returns six of them.
+      .map(
+        (account) => `${account.accountNumber} (${account.scrapedRows} rows)`
+      )
   );
   if (unmapped.length > 0) {
     lines.push(

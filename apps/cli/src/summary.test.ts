@@ -15,6 +15,7 @@ function report(over: Partial<RunReport> = {}): RunReport {
           {
             accountNumber: "12-345",
             mapped: true,
+            scrapedRows: 12,
             mappedRows: 12,
             nonFiniteSkipped: 0,
             pendingSkipped: 0,
@@ -66,6 +67,7 @@ describe("renderSummary", () => {
               {
                 accountNumber: "99",
                 mapped: false,
+                scrapedRows: 12,
                 mappedRows: 0,
                 nonFiniteSkipped: 0,
                 pendingSkipped: 0,

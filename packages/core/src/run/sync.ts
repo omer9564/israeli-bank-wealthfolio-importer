@@ -34,6 +34,12 @@ export interface AccountReport {
   nonFiniteSkipped: number;
   /** Rows dropped because the charge is still pending. Routine. */
   pendingSkipped: number;
+  /**
+   * Rows the scraper returned for this account, before mapping. Reported for
+   * UNMAPPED accounts so a discovery run can tell a live card from one the
+   * issuer merely still lists — the count is the only signal available.
+   */
+  scrapedRows: number;
   /** Rows dropped because the charge was exactly zero. Benign but worth seeing. */
   zeroAmountSkipped: number;
 }
@@ -185,6 +191,7 @@ async function processAccount(
   const report: AccountReport = {
     accountNumber: scraped.accountNumber,
     mapped: true,
+    scrapedRows: scraped.txns.length,
     mappedRows: mapped.activities.length,
     nonFiniteSkipped: mapped.nonFiniteSkipped,
     pendingSkipped: mapped.pendingSkipped,
@@ -243,6 +250,7 @@ async function processProvider(
         accountNumber: scraped.accountNumber,
         mapped: false,
         mappedRows: 0,
+        scrapedRows: scraped.txns.length,
         nonFiniteSkipped: 0,
         pendingSkipped: 0,
         zeroAmountSkipped: 0,
