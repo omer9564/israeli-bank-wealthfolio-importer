@@ -1,0 +1,20 @@
+name: wealthfolio-sync
+
+on:
+  schedule:
+    # Cron always runs in UTC and does not follow Israel's DST, so the local
+    # time shifts by an hour between seasons: 04:05/16:05 UTC is 06:05/18:05
+    # Israel Standard Time (winter, UTC+2) and 07:05/19:05 Israel Daylight
+    # Time (summer, UTC+3).
+    - cron: "5 4,16 * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    uses: omer9564/israeli-bank-wealthfolio-importer/.github/workflows/import.yml@v1
+    with:
+      days-back: "30"
+    secrets:
+      IBW_CONFIG: ${{ secrets.IBW_CONFIG }}
+      WEALTHFOLIO_URL: ${{ secrets.WEALTHFOLIO_URL }}
+      WEALTHFOLIO_PASSWORD: ${{ secrets.WEALTHFOLIO_PASSWORD }}

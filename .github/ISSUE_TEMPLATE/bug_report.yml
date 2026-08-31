@@ -1,0 +1,94 @@
+name: Bug report
+description: Something isn't working the way this project's docs say it should.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Before pasting anything below, please
+        double-check it for credentials, account numbers, or real transaction
+        descriptions — the run summary redacts known secret values
+        automatically, but a raw scraper error or a screenshot might not.
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      description: Which `companyId` were you importing from when this happened?
+      options:
+        - hapoalim
+        - leumi
+        - discount
+        - mercantile
+        - mizrahi
+        - otsarHahayal
+        - union
+        - beinleumi
+        - massad
+        - pagi
+        - yahav
+        - visaCal
+        - max
+        - isracard
+        - amex
+        - beyahadBishvilha
+        - Not provider-specific (config, Docker, Action, mapping, etc.)
+    validations:
+      required: true
+
+  - type: input
+    id: wealthfolio-version
+    attributes:
+      label: Wealthfolio version
+      description: The version of the Wealthfolio server you're importing into.
+      placeholder: e.g. 1.2.3, or the commit/tag if you build from source
+    validations:
+      required: true
+
+  - type: dropdown
+    id: run-mode
+    attributes:
+      label: How are you running the importer?
+      options:
+        - GitHub Actions (reusable workflow / composite action)
+        - Docker (sync)
+        - Docker (daemon)
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs
+      description: >
+        The run summary output (console or your workflow's job summary).
+        Remove or replace anything that isn't already `[REDACTED]` and looks
+        like it could be a credential, account number, or a real merchant
+        description you'd rather not share.
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: I checked the logs/config above for credentials and account numbers before submitting.
+          required: true

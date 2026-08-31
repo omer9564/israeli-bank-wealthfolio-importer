@@ -455,7 +455,7 @@ README leads with the tradeoff rather than burying it.
 
 ## 15. Repository CI and OSS readiness
 
-Following the ecsti layout: thin event workflows delegating to reusable ones.
+Thin event workflows delegating to reusable ones.
 
 - `.github/workflows/pull-request.yml`, `push.yml` — entry points with
   concurrency groups
@@ -465,7 +465,7 @@ Following the ecsti layout: thin event workflows delegating to reusable ones.
   build-only on PRs, push to GHCR on main, layer caching
 - `.github/workflows/release.yml` — on tag: publish `:vX.Y.Z`, move `:vX` and
   `:latest`, move the `vX` git tag so `@v1` consumers track it
-- Biome via ultracite, matching the ecsti toolchain
+- Biome via ultracite
 - MIT license, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue and PR templates,
   `CODEOWNERS`
 - README: what it does, the mandatory-companion warning (§2), a 5-minute

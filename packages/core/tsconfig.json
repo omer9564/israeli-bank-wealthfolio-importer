@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // `types: []` drops the Bun global namespace that the root config enables
+    // workspace-wide: this package is bundled into a browser-sandboxed
+    // Wealthfolio addon, so `Bun` and `process` must not even typecheck here.
+    // `WebWorker` supplies the fetch/Response/URLSearchParams the Wealthfolio
+    // client legitimately needs, without DOM's document/window.
+    "types": [],
+    "lib": ["ESNext", "WebWorker"]
+  },
+  "include": ["src/**/*.ts"],
+  // Tests are never bundled into the addon; `boundary.test.ts` skips them for
+  // the same reason.
+  "exclude": ["src/**/*.test.ts"]
+}

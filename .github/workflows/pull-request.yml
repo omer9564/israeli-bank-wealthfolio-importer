@@ -1,0 +1,19 @@
+name: pull-request
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: ./.github/workflows/node-ci.yml
+  docker:
+    uses: ./.github/workflows/docker-build.yml
+    permissions:
+      contents: read
+    with:
+      push: false
