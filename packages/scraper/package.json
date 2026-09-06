@@ -10,6 +10,6 @@
   "dependencies": {
     "@ibw/core": "workspace:*",
     "israeli-bank-scrapers": "6.9.0",
-    "puppeteer": "24.43.1"
+    "puppeteer": "25.10.0"
   }
 }
