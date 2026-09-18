@@ -3,10 +3,18 @@ import type { ActivityImport } from "../types";
 import type { WealthfolioClient } from "../wealthfolio/client";
 import type { LinkReport, Sink, WriteReport } from "./types";
 
+const ALREADY_LINKED_PATTERN =
+  /already linked|already (?:a )?pair|already grouped|source_group_id/i;
+
 /**
  * `/activities/import` requires `isValid`/`isDraft`, which only the check pass
  * populates — so both calls are mandatory and ordered. Line numbers are assigned
  * here so the ids coming back off the import can be correlated for linking.
+ *
+ * Correlation is by request index, not by the echoed `lineNumber` field:
+ * Wealthfolio's check/import responses populate `duplicateOfId` / `id` but
+ * often drop `lineNumber`. Keying the id map on that field left every
+ * rescan pair id-less (duplicate bank debit + new synthesized card leg).
  */
 export class ApiSink implements Sink {
   private readonly client: WealthfolioClient;
@@ -31,7 +39,12 @@ export class ApiSink implements Sink {
       ...activity,
       lineNumber: index,
     }));
-    const checked = await this.client.checkImport(numbered);
+    const checked = (await this.client.checkImport(numbered)).map(
+      (row, index) => ({
+        ...row,
+        lineNumber: numbered[index]?.lineNumber ?? index,
+      })
+    );
 
     const duplicates = checked.filter(
       (row) => row.duplicateOfId !== undefined
@@ -72,9 +85,10 @@ export class ApiSink implements Sink {
     }
 
     const result = await this.client.import(importable);
-    for (const row of result.activities) {
-      if (row.lineNumber !== undefined && row.id !== undefined) {
-        ids.set(row.lineNumber, row.id);
+    for (const [index, row] of result.activities.entries()) {
+      const line = row.lineNumber ?? importable[index]?.lineNumber;
+      if (line !== undefined && row.id !== undefined) {
+        ids.set(line, row.id);
       }
     }
 
@@ -95,6 +109,10 @@ export class ApiSink implements Sink {
    * which Wealthfolio's classifier ignores, so it overstates the card balance
    * while appearing in no spending report. The skips are counted and returned
    * so `runSync` can fail the run over them.
+   *
+   * Relinking a pair that already shares a `source_group_id` is not a skip:
+   * a trailing rescan of an already-linked book will hit that error every
+   * time, and treating it as failure makes a healthy sync look broken.
    */
   async link(pairs: PairPlan[]): Promise<LinkReport> {
     let linked = 0;
@@ -114,10 +132,19 @@ export class ApiSink implements Sink {
       try {
         await this.client.link(outId, inId);
         linked += 1;
-      } catch {
-        unlinked += 1;
+      } catch (error) {
+        if (isAlreadyLinkedError(error)) {
+          linked += 1;
+        } else {
+          unlinked += 1;
+        }
       }
     }
     return { linked, supported: true, unlinked };
   }
+}
+
+function isAlreadyLinkedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return ALREADY_LINKED_PATTERN.test(message);
 }

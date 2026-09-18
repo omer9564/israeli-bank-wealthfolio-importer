@@ -298,17 +298,19 @@ days. There are three possible outcomes:
   is not a bug and not something scraped in error.
 
 Whichever outcome applies, the linking itself has to succeed. Both legs are
-imported first and then linked in a second call, and if Wealthfolio returns no
-id for one of them — most often because that leg was already present and got
-deduplicated — the pair stays unlinked. That is not cosmetic: whichever leg
-was written — the synthesized one, or a matched pre-existing card credit —
-keeps moving the card balance with nothing netting against it, and because
-the importer keeps no state, nothing will ever undo it. So the run **fails**
-and the summary names the count, telling you to find the **unlinked**
-`TRANSFER_IN` row(s) on the card account whose amount and date match the bank
-debit. Some — not all — will have a comment ending in `· תשלום לכרטיס`; that
-suffix only marks a row the importer created, so treat it as a hint rather
-than the identifying trait, and link or delete the affected rows by hand.
+imported first and then linked in a second call. A trailing rescan will
+re-send rows that already exist: the check pass flags those as duplicates
+and returns their existing ids (`duplicateOfId`), which is enough to link
+again — including when the server does not echo `lineNumber`. Relinking a
+pair that is already grouped is treated as success, so a healthy book does
+not fail every run after the first. If a pair still cannot be linked — no
+id for a leg, or a link call that is not "already linked" — the run
+**fails** and the summary names the count, telling you to find the
+**unlinked** `TRANSFER_IN` row(s) on the card account whose amount and date
+match the bank debit. Some — not all — will have a comment ending in
+`· תשלום לכרטיס`; that suffix only marks a row the importer created, so
+treat it as a hint rather than the identifying trait, and link or delete
+the affected rows by hand.
 
 All of this only happens when `linkTransfers` is true (the default). Without
 any `cardPayments` entries at all, no linking is attempted and card payments

@@ -152,6 +152,67 @@ describe("ApiSink", () => {
     expect(report.ids.get(1)).toBe("existing-1");
   });
 
+  test("recovers duplicate and imported ids when the server omits lineNumber", async () => {
+    // Live Wealthfolio's check/import responses set duplicateOfId / id but do
+    // not echo the lineNumber we sent. Correlating only on that field leaves
+    // every pair id-less: the bank debit is a duplicate, the synthesized card
+    // leg is new, and POST /activities/link never runs.
+    const sink = new ApiSink({
+      checkImport(rows: ActivityImport[]) {
+        return rows.map((row, index) => {
+          const { lineNumber: _dropped, ...rest } = row;
+          return {
+            ...rest,
+            isValid: true,
+            ...(index === 0 ? { duplicateOfId: "existing-out" } : {}),
+          };
+        });
+      },
+      import(rows: ActivityImport[]) {
+        return {
+          activities: rows.map((row) => {
+            const { lineNumber: _dropped, ...rest } = row;
+            return { ...rest, id: "new-in" };
+          }),
+          importRunId: "run",
+          summary: { total: 1, imported: 1, skipped: 0, duplicates: 0 },
+        };
+      },
+      link() {
+        return undefined;
+      },
+    } as never);
+
+    const report = await sink.write([activity(), activity()]);
+    expect(report.duplicates).toBe(1);
+    expect(report.imported).toBe(1);
+    expect(report.ids.get(0)).toBe("existing-out");
+    expect(report.ids.get(1)).toBe("new-in");
+  });
+
+  test("treats a pair that is already linked on the server as linked", async () => {
+    // After a successful first sync, a rescan recovers both ids and calls
+    // link again. Wealthfolio then rejects the pair as already grouped —
+    // that is success, not a failed run.
+    const sink = new ApiSink({
+      link() {
+        throw new Error(
+          "Wealthfolio request failed with 400 at /activities/link: already linked"
+        );
+      },
+    } as never);
+
+    const report = await sink.link([
+      {
+        out: activity({ id: "a" }),
+        in: activity({ id: "b" }),
+        synthesized: true,
+      },
+    ]);
+
+    expect(report).toEqual({ linked: 1, supported: true, unlinked: 0 });
+  });
+
   test("attempts every pair even when one link call fails", async () => {
     // A synthesized leg that is written but never linked is permanent, so an
     // early abort on pair 1 must not strand the legs of pairs 2 and 3.
